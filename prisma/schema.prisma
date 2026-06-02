@@ -1,0 +1,91 @@
+// TalkT — Prisma schema
+// Relational metadata + structured feedback. Bulky artifacts (transcripts,
+// raw DeepSeek output) live in Vercel Blob; only blob URLs are stored here.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum InterviewType {
+  template
+  custom
+}
+
+enum Visibility {
+  public
+  private
+}
+
+enum AttemptStatus {
+  in_progress
+  analyzing
+  ready
+  failed
+}
+
+// Thin profile row keyed by Clerk user id.
+model User {
+  id        String   @id // Clerk user id
+  email     String?  @unique
+  name      String?
+  createdAt DateTime @default(now())
+
+  interviews Interview[] // custom interviews this user owns
+  attempts   Attempt[]
+}
+
+model Interview {
+  id          String        @id @default(cuid())
+  ownerId     String? // null = system template
+  owner       User?         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title       String
+  role        String?
+  topic       String?
+  difficulty  String?
+  type        InterviewType @default(custom)
+  visibility  Visibility    @default(private)
+  questions   Json // ordered Question[]: { id, text, idealAnswerHint? }
+  voiceConfig Json? // { voiceId, language }
+  createdAt   DateTime      @default(now())
+
+  attempts Attempt[]
+
+  @@index([ownerId])
+  @@index([type, visibility])
+}
+
+model Attempt {
+  id                String        @id @default(cuid())
+  userId            String
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interviewId       String
+  interview         Interview     @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  status            AttemptStatus @default(in_progress)
+  vapiCallId        String?       @unique
+  startedAt         DateTime      @default(now())
+  endedAt           DateTime?
+  transcriptBlobUrl String?
+
+  feedback Feedback?
+
+  @@index([userId])
+  @@index([interviewId])
+}
+
+model Feedback {
+  id              String   @id @default(cuid())
+  attemptId       String   @unique
+  attempt         Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  overallScore    Float
+  dimensionScores Json // { communication, technical, structure, confidence, ... }
+  strengths       String[]
+  improvements    String[]
+  perQuestion     Json // [{ questionId, ratingScore, modelAnswer, critique }]
+  rawBlobUrl      String?
+  createdAt       DateTime @default(now())
+}
