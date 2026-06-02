@@ -1,0 +1,137 @@
+- generic [active] [ref=e1]:
+  - button "Open Next.js Dev Tools" [ref=e108] [cursor=pointer]:
+    - img [ref=e109]
+  - alert [ref=e112]
+  - generic [ref=e113]:
+    - complementary [ref=e114]:
+      - button "TalkT" [ref=e116] [cursor=pointer]:
+        - generic [ref=e117]:
+          - img [ref=e118]
+          - generic [ref=e171]: TalkT
+      - button "Build interview" [ref=e172] [cursor=pointer]:
+        - img [ref=e173]
+        - text: Build interview
+      - navigation [ref=e174]:
+        - button "Dashboard" [ref=e175] [cursor=pointer]:
+          - img [ref=e176]
+          - text: Dashboard
+        - button "Interviews" [ref=e178] [cursor=pointer]:
+          - img [ref=e179]
+          - text: Interviews
+      - button "AP Alex Park alex@example.com" [ref=e182] [cursor=pointer]:
+        - generic [ref=e183]: AP
+        - generic [ref=e184]:
+          - generic [ref=e185]: Alex Park
+          - generic [ref=e186]: alex@example.com
+        - img [ref=e187]
+    - generic [ref=e189]:
+      - banner [ref=e190]:
+        - generic [ref=e191]:
+          - generic [ref=e192]: talkt
+          - img [ref=e193]
+          - generic [ref=e195]: Interviews
+        - generic [ref=e196]:
+          - button "Toggle theme" [ref=e197] [cursor=pointer]:
+            - img [ref=e198]
+          - button "Search" [ref=e204] [cursor=pointer]:
+            - img [ref=e205]
+            - text: Search
+      - main [ref=e208]:
+        - generic [ref=e586]:
+          - button "All interviews" [ref=e587] [cursor=pointer]:
+            - img [ref=e588]
+            - text: All interviews
+          - generic [ref=e590]:
+            - generic [ref=e591]: Engineering
+            - generic [ref=e592]: Curated
+            - generic [ref=e593]: Mid-Senior
+          - heading "Frontend engineer" [level=1] [ref=e594]
+          - paragraph [ref=e595]: Component design, state, performance, and a small system-design prompt.
+          - generic [ref=e596]:
+            - generic [ref=e597]:
+              - generic [ref=e598]: Questions
+              - generic [ref=e599]: "8"
+            - generic [ref=e600]:
+              - generic [ref=e601]: Duration
+              - generic [ref=e602]: ~25 min
+            - generic [ref=e603]:
+              - generic [ref=e604]: Format
+              - generic [ref=e605]: Voice call
+            - generic [ref=e606]:
+              - generic [ref=e607]: Taken
+              - generic [ref=e608]: 4,120x
+          - generic [ref=e609]:
+            - generic [ref=e610]:
+              - generic [ref=e611]:
+                - generic [ref=e612]: "01"
+                - generic [ref=e613]: How it runs
+              - generic [ref=e615]:
+                - generic [ref=e616]:
+                  - generic [ref=e617]: "1"
+                  - img [ref=e618]
+                  - generic [ref=e620]:
+                    - generic [ref=e621]: Join a voice call
+                    - generic [ref=e622]: A browser call opens - no phone number, no scheduling.
+                - generic [ref=e623]:
+                  - generic [ref=e624]: "2"
+                  - img [ref=e625]
+                  - generic [ref=e627]:
+                    - generic [ref=e628]: Answer 8 questions aloud
+                    - generic [ref=e629]: Your interviewer asks in real time and follows up.
+                - generic [ref=e630]:
+                  - generic [ref=e631]: "3"
+                  - img [ref=e632]
+                  - generic [ref=e635]:
+                    - generic [ref=e636]: Get scored feedback
+                    - generic [ref=e637]: Structured scores and per-question notes within seconds.
+              - generic [ref=e638]:
+                - generic [ref=e639]: "02"
+                - generic [ref=e640]: Question set
+                - generic [ref=e642]: Ordered · adapts live
+              - list [ref=e643]:
+                - listitem [ref=e644]:
+                  - generic [ref=e645]: "01"
+                  - generic [ref=e646]: Walk me through how you'd structure a large React app for a team of ten.
+                - listitem [ref=e647]:
+                  - generic [ref=e648]: "02"
+                  - generic [ref=e649]: When would you reach for a global store over local state, and what are the costs?
+                - listitem [ref=e650]:
+                  - generic [ref=e651]: "03"
+                  - generic [ref=e652]: A list of 10,000 rows is janky on scroll. How do you diagnose and fix it?
+                - listitem [ref=e653]:
+                  - generic [ref=e654]: "04"
+                  - generic [ref=e655]: Explain the tradeoffs between server components and client components.
+                - listitem [ref=e656]:
+                  - generic [ref=e657]: "05"
+                  - generic [ref=e658]: How do you keep a design system's components accessible by default?
+                - listitem [ref=e659]:
+                  - generic [ref=e660]: "06"
+                  - generic [ref=e661]: Describe a bug you fixed that taught you something about the platform.
+                - listitem [ref=e662]:
+                  - generic [ref=e663]: "07"
+                  - generic [ref=e664]: Design the data flow for a collaborative cursor feature.
+                - listitem [ref=e665]:
+                  - generic [ref=e666]: "08"
+                  - generic [ref=e667]: What's your approach to testing a complex form?
+            - generic [ref=e669]:
+              - generic [ref=e670]: Your session
+              - generic [ref=e671]:
+                - generic [ref=e672]:
+                  - generic [ref=e673]: Interviewer
+                  - generic [ref=e674]: Assigned
+                - generic [ref=e675]:
+                  - img [ref=e677]
+                  - generic [ref=e730]:
+                    - generic [ref=e731]: Kai
+                    - generic [ref=e732]: Brisk, precise · TalkT
+                  - img [ref=e733]
+              - generic [ref=e737]:
+                - generic [ref=e738]: Intensity
+                - generic [ref=e739]:
+                  - button "Easier" [ref=e740] [cursor=pointer]
+                  - button "As listed" [ref=e741] [cursor=pointer]
+                  - button "Harder" [ref=e742] [cursor=pointer]
+              - button "Start interview" [ref=e743] [cursor=pointer]:
+                - img [ref=e744]
+                - text: Start interview
+              - paragraph [ref=e746]: Opens a browser voice call. End any time.

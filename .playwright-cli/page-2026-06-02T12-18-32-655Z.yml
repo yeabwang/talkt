@@ -1,0 +1,48 @@
+- generic [active] [ref=e1]:
+  - button "Open Next.js Dev Tools" [ref=e108] [cursor=pointer]:
+    - img [ref=e109]
+  - alert [ref=e112]
+  - generic [ref=e1311]:
+    - generic [ref=e1312]:
+      - generic [ref=e1313]:
+        - img [ref=e1314]
+        - generic [ref=e1367]: TalkT
+      - button "Leave" [ref=e1368] [cursor=pointer]:
+        - img [ref=e1369]
+    - generic [ref=e1373]:
+      - generic [ref=e1374]:
+        - generic [ref=e1375]:
+          - generic [ref=e1377]:
+            - generic [ref=e1378]: AP
+            - generic [ref=e1379]: Alex Park
+          - generic [ref=e1402]: Camera not needed - voice only
+          - generic [ref=e1403]:
+            - button "mic" [ref=e1404] [cursor=pointer]:
+              - img [ref=e1405]
+            - button "camera" [ref=e1408] [cursor=pointer]:
+              - img [ref=e1409]
+            - button "Settings" [ref=e1413] [cursor=pointer]:
+              - img [ref=e1414]
+        - generic [ref=e1417]:
+          - generic [ref=e1418]:
+            - img [ref=e1419]
+            - text: MacBook Mic
+          - generic [ref=e1423]:
+            - img [ref=e1424]
+            - text: System output
+          - generic [ref=e1429]: No recording leaves your browser
+      - generic [ref=e1430]:
+        - generic [ref=e1431]: Ready to join?
+        - heading "Engineering manager (custom)" [level=1] [ref=e1432]
+        - paragraph [ref=e1433]: 8 questions · ~25 min · spoken
+        - generic [ref=e1435]:
+          - img [ref=e1437]
+          - generic [ref=e1490]:
+            - generic [ref=e1491]: Mira · TalkT interviewer
+            - generic [ref=e1492]: Patient, probing
+          - generic [ref=e1493]: Waiting
+        - button "Join now" [ref=e1495] [cursor=pointer]:
+          - img [ref=e1496]
+          - text: Join now
+        - button "Not yet - back to setup" [ref=e1498] [cursor=pointer]
+        - paragraph [ref=e1499]: Speak naturally. The interviewer will wait for you to finish.

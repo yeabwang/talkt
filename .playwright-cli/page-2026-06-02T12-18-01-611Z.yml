@@ -1,0 +1,138 @@
+- generic [active] [ref=e1]:
+  - button "Open Next.js Dev Tools" [ref=e108] [cursor=pointer]:
+    - img [ref=e109]
+  - alert [ref=e112]
+  - generic [ref=e113]:
+    - complementary [ref=e114]:
+      - button "TalkT" [ref=e116] [cursor=pointer]:
+        - generic [ref=e117]:
+          - img [ref=e118]
+          - generic [ref=e171]: TalkT
+      - button "Build interview" [ref=e172] [cursor=pointer]:
+        - img [ref=e173]
+        - text: Build interview
+      - navigation [ref=e174]:
+        - button "Dashboard" [ref=e175] [cursor=pointer]:
+          - img [ref=e176]
+          - text: Dashboard
+        - button "Interviews" [ref=e178] [cursor=pointer]:
+          - img [ref=e179]
+          - text: Interviews
+      - button "AP Alex Park alex@example.com" [ref=e182] [cursor=pointer]:
+        - generic [ref=e183]: AP
+        - generic [ref=e184]:
+          - generic [ref=e185]: Alex Park
+          - generic [ref=e186]: alex@example.com
+        - img [ref=e187]
+    - generic [ref=e189]:
+      - banner [ref=e190]:
+        - generic [ref=e191]:
+          - generic [ref=e192]: talkt
+          - img [ref=e193]
+          - generic [ref=e195]: Build interview
+        - generic [ref=e196]:
+          - button "Toggle theme" [ref=e197] [cursor=pointer]:
+            - img [ref=e198]
+          - button "Search" [ref=e204] [cursor=pointer]:
+            - img [ref=e205]
+            - text: Search
+      - main [ref=e208]:
+        - generic [ref=e747]:
+          - generic [ref=e748]:
+            - generic [ref=e749]:
+              - img [ref=e751]
+              - generic [ref=e804]:
+                - generic [ref=e805]: AI builder
+                - generic [ref=e806]: In session
+              - generic [ref=e808]: 02 · Build
+            - generic [ref=e810]:
+              - generic [ref=e811]:
+                - img [ref=e813]
+                - generic [ref=e866]: I'll build you a custom interview. Let's start simple - what role or kind of interview do you want to practice?
+              - generic [ref=e910]: Engineering manager
+              - generic [ref=e911]:
+                - img [ref=e913]
+                - generic [ref=e966]: Got it - Engineering manager. What level or context should I pitch the questions at?
+              - generic [ref=e972]: Senior
+              - generic [ref=e973]:
+                - img [ref=e975]
+                - generic [ref=e1028]: What should we lean on? Pick a few themes - or tell me in your own words.
+              - generic [ref=e1035]: Leadership
+              - generic [ref=e1036]:
+                - img [ref=e1038]
+                - generic [ref=e1091]: How long should it run - short and sharp, or a full set?
+              - generic [ref=e1096]: 8 questions · ~25 min
+              - generic [ref=e1097]:
+                - img [ref=e1099]
+                - generic [ref=e1152]: That's everything I need. Review the plan on the right - generate the set when you're ready.
+              - generic [ref=e1154]:
+                - img [ref=e1156]
+                - generic [ref=e1210]:
+                  - img [ref=e1211]
+                  - text: Generating a question set from your brief...
+              - generic [ref=e1213]:
+                - img [ref=e1215]
+                - generic [ref=e1268]: Drafted 8 questions tuned to engineering manager, weighted toward leadership. Reorder or start when ready.
+            - generic [ref=e874]:
+              - textbox "The plan is ready - generate on the right" [disabled] [ref=e1153]
+              - button "Send" [disabled] [ref=e876]:
+                - img [ref=e877]
+          - generic [ref=e880]:
+            - generic [ref=e881]: Interview draft
+            - generic [ref=e882]:
+              - generic [ref=e883]:
+                - img [ref=e885]
+                - generic [ref=e888]:
+                  - generic [ref=e889]: Engineering manager
+                  - generic [ref=e890]: Senior
+              - generic [ref=e891]:
+                - generic [ref=e892]:
+                  - generic [ref=e893]: Focus
+                  - generic [ref=e894]: Leadership
+                - generic [ref=e895]:
+                  - generic [ref=e896]: Questions
+                  - generic [ref=e897]: "8"
+                - generic [ref=e898]:
+                  - generic [ref=e899]: Duration
+                  - generic [ref=e900]: ~25 min
+                - generic [ref=e901]:
+                  - generic [ref=e902]: Interviewer
+                  - generic [ref=e903]: Mira · assigned
+            - generic [ref=e1269]:
+              - generic [ref=e1270]:
+                - generic [ref=e1271]: "03"
+                - generic [ref=e1272]: Generated set
+              - list [ref=e1274]:
+                - listitem [ref=e1275]:
+                  - generic [ref=e1276]: "01"
+                  - generic [ref=e1277]: "On leadership: give me a specific example where it made the difference."
+                - listitem [ref=e1278]:
+                  - generic [ref=e1279]: "02"
+                  - generic [ref=e1280]: Tell me about a time your work as engineering manager didn't go to plan. What did you own?
+                - listitem [ref=e1281]:
+                  - generic [ref=e1282]: "03"
+                  - generic [ref=e1283]: Walk me through how you'd approach your first month as engineering manager.
+                - listitem [ref=e1284]:
+                  - generic [ref=e1285]: "04"
+                  - generic [ref=e1286]: What does great look like in this role, and how would you measure it?
+                - listitem [ref=e1287]:
+                  - generic [ref=e1288]: "05"
+                  - generic [ref=e1289]: Describe a hard tradeoff you've made. What did you give up, and why?
+                - listitem [ref=e1290]:
+                  - generic [ref=e1291]: "06"
+                  - generic [ref=e1292]: How do you handle disagreement with someone more senior than you?
+                - listitem [ref=e1293]:
+                  - generic [ref=e1294]: "07"
+                  - generic [ref=e1295]: Tell me about a decision you made with incomplete information.
+                - listitem [ref=e1296]:
+                  - generic [ref=e1297]: "08"
+                  - generic [ref=e1298]: What's a skill you're deliberately working on right now?
+              - generic [ref=e1299]:
+                - button "Start interview" [ref=e1300] [cursor=pointer]:
+                  - img [ref=e1301]
+                  - text: Start interview
+                - generic [ref=e1303]:
+                  - button "Regenerate" [ref=e1304] [cursor=pointer]:
+                    - img [ref=e1305]
+                    - text: Regenerate
+                  - button "Save & exit" [ref=e1310] [cursor=pointer]

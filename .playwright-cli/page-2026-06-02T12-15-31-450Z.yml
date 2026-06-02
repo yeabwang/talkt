@@ -1,0 +1,224 @@
+- generic [ref=e1]:
+  - button "Open Next.js Dev Tools" [ref=e108] [cursor=pointer]:
+    - img [ref=e109]
+  - alert [ref=e112]
+  - generic [ref=e113]:
+    - complementary [ref=e114]:
+      - button "TalkT" [ref=e116] [cursor=pointer]:
+        - generic [ref=e117]:
+          - img [ref=e118]
+          - generic [ref=e171]: TalkT
+      - button "Build interview" [ref=e172] [cursor=pointer]:
+        - img [ref=e173]
+        - text: Build interview
+      - navigation [ref=e174]:
+        - button "Dashboard" [ref=e175] [cursor=pointer]:
+          - img [ref=e176]
+          - text: Dashboard
+        - button "Interviews" [active] [ref=e178] [cursor=pointer]:
+          - img [ref=e179]
+          - text: Interviews
+      - button "AP Alex Park alex@example.com" [ref=e182] [cursor=pointer]:
+        - generic [ref=e183]: AP
+        - generic [ref=e184]:
+          - generic [ref=e185]: Alex Park
+          - generic [ref=e186]: alex@example.com
+        - img [ref=e187]
+    - generic [ref=e189]:
+      - banner [ref=e190]:
+        - generic [ref=e191]:
+          - generic [ref=e192]: talkt
+          - img [ref=e193]
+          - generic [ref=e195]: Interviews
+        - generic [ref=e196]:
+          - button "Toggle theme" [ref=e197] [cursor=pointer]:
+            - img [ref=e198]
+          - button "Search" [ref=e204] [cursor=pointer]:
+            - img [ref=e205]
+            - text: Search
+      - main [ref=e208]:
+        - generic [ref=e369]:
+          - generic [ref=e370]:
+            - generic [ref=e371]:
+              - generic [ref=e372]: Interviews
+              - heading "Pick an interview, or build one." [level=1] [ref=e373]
+            - button "Build custom" [ref=e374] [cursor=pointer]:
+              - img [ref=e375]
+              - text: Build custom
+          - generic [ref=e378]:
+            - generic [ref=e379]:
+              - img [ref=e380]
+              - textbox "Search by role or topic" [ref=e383]
+            - generic [ref=e384]:
+              - button "All" [ref=e385] [cursor=pointer]
+              - button "Engineering" [ref=e386] [cursor=pointer]
+              - button "Product" [ref=e387] [cursor=pointer]
+              - button "General" [ref=e388] [cursor=pointer]
+              - button "Healthcare" [ref=e389] [cursor=pointer]
+              - button "Business" [ref=e390] [cursor=pointer]
+              - button "Sales" [ref=e391] [cursor=pointer]
+              - button "Design" [ref=e392] [cursor=pointer]
+              - button "Custom" [ref=e393] [cursor=pointer]
+          - generic [ref=e394]:
+            - generic [ref=e395]:
+              - generic [ref=e396]:
+                - generic [ref=e397]:
+                  - img [ref=e399]
+                  - generic [ref=e402]:
+                    - generic [ref=e403]: Engineering
+                    - generic [ref=e404]: Mid-Senior
+                - generic [ref=e405]: Curated
+              - generic [ref=e406]:
+                - button "Frontend engineer" [ref=e407] [cursor=pointer]
+                - generic [ref=e408]: Component design, state, performance, and a small system-design prompt.
+              - generic [ref=e409]:
+                - generic [ref=e410]: 8 questions · ~25 min
+                - generic [ref=e411]:
+                  - button "Details" [ref=e412] [cursor=pointer]
+                  - button "Start" [ref=e413] [cursor=pointer]:
+                    - img [ref=e414]
+                    - text: Start
+            - generic [ref=e416]:
+              - generic [ref=e417]:
+                - generic [ref=e418]:
+                  - img [ref=e420]
+                  - generic [ref=e424]:
+                    - generic [ref=e425]: Product
+                    - generic [ref=e426]: All levels
+                - generic [ref=e427]: Curated
+              - generic [ref=e428]:
+                - button "Product manager" [ref=e429] [cursor=pointer]
+                - generic [ref=e430]: Product judgment, metrics, and stakeholder tradeoffs - no whiteboard needed.
+              - generic [ref=e431]:
+                - generic [ref=e432]: 7 questions · ~22 min
+                - generic [ref=e433]:
+                  - button "Details" [ref=e434] [cursor=pointer]
+                  - button "Start" [ref=e435] [cursor=pointer]:
+                    - img [ref=e436]
+                    - text: Start
+            - generic [ref=e438]:
+              - generic [ref=e439]:
+                - generic [ref=e440]:
+                  - img [ref=e442]
+                  - generic [ref=e444]:
+                    - generic [ref=e445]: General
+                    - generic [ref=e446]: All levels
+                - generic [ref=e447]: Curated
+              - generic [ref=e448]:
+                - button "Behavioral & leadership" [ref=e449] [cursor=pointer]
+                - generic [ref=e450]: The questions every interview asks, rehearsed until they're sharp.
+              - generic [ref=e451]:
+                - generic [ref=e452]: 6 questions · ~18 min
+                - generic [ref=e453]:
+                  - button "Details" [ref=e454] [cursor=pointer]
+                  - button "Start" [ref=e455] [cursor=pointer]:
+                    - img [ref=e456]
+                    - text: Start
+            - generic [ref=e458]:
+              - generic [ref=e459]:
+                - generic [ref=e460]:
+                  - img [ref=e462]
+                  - generic [ref=e464]:
+                    - generic [ref=e465]: Healthcare
+                    - generic [ref=e466]: Entry-Mid
+                - generic [ref=e467]: Community
+              - generic [ref=e468]:
+                - button "Registered nurse" [ref=e469] [cursor=pointer]
+                - generic [ref=e470]: Triage judgment, communication under pressure, and ethics scenarios.
+              - generic [ref=e471]:
+                - generic [ref=e472]: 7 questions · ~20 min
+                - generic [ref=e473]:
+                  - button "Details" [ref=e474] [cursor=pointer]
+                  - button "Start" [ref=e475] [cursor=pointer]:
+                    - img [ref=e476]
+                    - text: Start
+            - generic [ref=e478]:
+              - generic [ref=e479]:
+                - generic [ref=e480]:
+                  - img [ref=e482]
+                  - generic [ref=e485]:
+                    - generic [ref=e486]: Business
+                    - generic [ref=e487]: Senior
+                - generic [ref=e488]: Curated
+              - generic [ref=e489]:
+                - button "Consulting case" [ref=e490] [cursor=pointer]
+                - generic [ref=e491]: A spoken case with structure, math out loud, and a recommendation.
+              - generic [ref=e492]:
+                - generic [ref=e493]: 5 questions · ~28 min
+                - generic [ref=e494]:
+                  - button "Details" [ref=e495] [cursor=pointer]
+                  - button "Start" [ref=e496] [cursor=pointer]:
+                    - img [ref=e497]
+                    - text: Start
+            - generic [ref=e499]:
+              - generic [ref=e500]:
+                - generic [ref=e501]:
+                  - img [ref=e503]
+                  - generic [ref=e505]:
+                    - generic [ref=e506]: Sales
+                    - generic [ref=e507]: Mid
+                - generic [ref=e508]: Community
+              - generic [ref=e509]:
+                - button "Account executive" [ref=e510] [cursor=pointer]
+                - generic [ref=e511]: Role-play discovery calls and handle the objections you fear most.
+              - generic [ref=e512]:
+                - generic [ref=e513]: 6 questions · ~18 min
+                - generic [ref=e514]:
+                  - button "Details" [ref=e515] [cursor=pointer]
+                  - button "Start" [ref=e516] [cursor=pointer]:
+                    - img [ref=e517]
+                    - text: Start
+            - generic [ref=e519]:
+              - generic [ref=e520]:
+                - generic [ref=e521]:
+                  - img [ref=e523]
+                  - generic [ref=e529]:
+                    - generic [ref=e530]: Design
+                    - generic [ref=e531]: Mid-Senior
+                - generic [ref=e532]: Curated
+              - generic [ref=e533]:
+                - button "Product designer" [ref=e534] [cursor=pointer]
+                - generic [ref=e535]: Talk through your process, defend a decision, and critique a flow live.
+              - generic [ref=e536]:
+                - generic [ref=e537]: 6 questions · ~22 min
+                - generic [ref=e538]:
+                  - button "Details" [ref=e539] [cursor=pointer]
+                  - button "Start" [ref=e540] [cursor=pointer]:
+                    - img [ref=e541]
+                    - text: Start
+            - generic [ref=e543]:
+              - generic [ref=e544]:
+                - generic [ref=e545]:
+                  - img [ref=e547]
+                  - generic [ref=e550]:
+                    - generic [ref=e551]: Engineering
+                    - generic [ref=e552]: Mid-Senior
+                - generic [ref=e553]: Curated
+              - generic [ref=e554]:
+                - button "Data scientist" [ref=e555] [cursor=pointer]
+                - generic [ref=e556]: Reason out loud about experiments, models, and messy real-world data.
+              - generic [ref=e557]:
+                - generic [ref=e558]: 7 questions · ~26 min
+                - generic [ref=e559]:
+                  - button "Details" [ref=e560] [cursor=pointer]
+                  - button "Start" [ref=e561] [cursor=pointer]:
+                    - img [ref=e562]
+                    - text: Start
+            - generic [ref=e564]:
+              - generic [ref=e565]:
+                - generic [ref=e566]:
+                  - img [ref=e568]
+                  - generic [ref=e571]:
+                    - generic [ref=e572]: Custom
+                    - generic [ref=e573]: Senior
+                - generic [ref=e574]: Custom
+              - generic [ref=e575]:
+                - button "Engineering manager (custom)" [ref=e576] [cursor=pointer]
+                - generic [ref=e577]: "Generated from your brief: first-time EM, 30-person org, growth focus."
+              - generic [ref=e578]:
+                - generic [ref=e579]: 6 questions · ~24 min
+                - generic [ref=e580]:
+                  - button "Details" [ref=e581] [cursor=pointer]
+                  - button "Start" [ref=e582] [cursor=pointer]:
+                    - img [ref=e583]
+                    - text: Start
