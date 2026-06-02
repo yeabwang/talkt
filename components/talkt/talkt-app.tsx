@@ -10,7 +10,10 @@ import { DashboardScreen } from "@/components/talkt/dashboard-screen";
 import { LibraryScreen, InterviewDetailScreen } from "@/components/talkt/library-screen";
 import { LiveInterviewScreen } from "@/components/talkt/live-screen";
 import { LobbyScreen } from "@/components/talkt/lobby-screen";
+import { ReportsScreen } from "@/components/talkt/reports-screen";
 import { ResultsScreen } from "@/components/talkt/results-screen";
+import { SettingsScreen } from "@/components/talkt/settings-screen";
+import { UsageScreen } from "@/components/talkt/usage-screen";
 
 type Theme = "dark" | "light";
 
@@ -116,6 +119,12 @@ export function TalkTApp() {
     );
   } else if (route === "builder") {
     body = <BuilderScreen navigate={navigate} startInterview={startInterview} />;
+  } else if (route === "reports") {
+    body = <ReportsScreen navigate={navigate} startInterview={startInterview} attempts={attempts} allInterviews={allInterviews} />;
+  } else if (route === "usage") {
+    body = <UsageScreen />;
+  } else if (route === "settings") {
+    body = <SettingsScreen user={user} onSignOut={signOut} />;
   } else if (route === "results") {
     const active = interview ?? allInterviews[0];
     const attemptId = params.attemptId as string | undefined;

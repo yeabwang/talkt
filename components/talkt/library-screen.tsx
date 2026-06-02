@@ -2,9 +2,26 @@
 
 import * as React from "react";
 
-import { VOICES, type Interview } from "@/components/talkt/data";
+import { VOICES, interviewLanguage, type Interview } from "@/components/talkt/data";
 import type { TalkTRoute } from "@/components/talkt/app-shell";
 import { AgentAvatar, Icon, SectionHeader, TalkTButton, categoryIcon } from "@/components/talkt/primitives";
+
+interface LibraryFilters {
+  topic: string;
+  language: string;
+  length: string;
+  difficulty: string;
+  source: string;
+}
+
+const EMPTY_FILTERS: LibraryFilters = { topic: "All", language: "All", length: "All", difficulty: "All", source: "All" };
+const LENGTH_OPTIONS = ["All", "Short", "Medium", "Long"];
+
+function lengthBucket(minutes: number) {
+  if (minutes <= 20) return "Short";
+  if (minutes <= 27) return "Medium";
+  return "Long";
+}
 
 export function LibraryScreen({
   navigate,
@@ -16,56 +33,84 @@ export function LibraryScreen({
   allInterviews: Interview[];
 }) {
   const [query, setQuery] = React.useState("");
-  const [category, setCategory] = React.useState("All");
-  const categories = ["All", ...Array.from(new Set(allInterviews.map((interview) => interview.category)))];
-  const filtered = allInterviews.filter(
-    (interview) =>
-      (category === "All" || interview.category === category) &&
-      (query === "" || `${interview.title}${interview.subtitle}${interview.blurb}`.toLowerCase().includes(query.toLowerCase()))
+  const [filters, setFilters] = React.useState<LibraryFilters>(EMPTY_FILTERS);
+  const [filterOpen, setFilterOpen] = React.useState(false);
+
+  const options = React.useMemo(
+    () => ({
+      topic: ["All", ...Array.from(new Set(allInterviews.map((interview) => interview.category)))],
+      language: ["All", ...Array.from(new Set(allInterviews.map(interviewLanguage)))],
+      difficulty: ["All", ...Array.from(new Set(allInterviews.map((interview) => interview.difficulty)))],
+      source: ["All", ...Array.from(new Set(allInterviews.map((interview) => interview.source)))],
+      length: LENGTH_OPTIONS,
+    }),
+    [allInterviews]
   );
+
+  const activeCount = Object.values(filters).filter((value) => value !== "All").length;
+
+  const filtered = allInterviews.filter((interview) => {
+    if (filters.topic !== "All" && interview.category !== filters.topic) return false;
+    if (filters.language !== "All" && interviewLanguage(interview) !== filters.language) return false;
+    if (filters.difficulty !== "All" && interview.difficulty !== filters.difficulty) return false;
+    if (filters.source !== "All" && interview.source !== filters.source) return false;
+    if (filters.length !== "All" && lengthBucket(interview.minutes) !== filters.length) return false;
+    if (query !== "" && !`${interview.title}${interview.subtitle}${interview.blurb}`.toLowerCase().includes(query.toLowerCase())) return false;
+    return true;
+  });
 
   return (
     <div className="fade-up talkt-page">
-      <div className="flex items-center justify-between talkt-mobile-stack" style={{ marginBottom: 28, gap: 16 }}>
-        <div>
-          <div className="mono-label" style={{ marginBottom: 8 }}>
-            Interviews
-          </div>
-          <h1 className="h1-app">Pick an interview, or build one.</h1>
+      <div style={{ marginBottom: 28 }}>
+        <div className="mono-label" style={{ marginBottom: 8 }}>
+          Interviews
         </div>
-        <TalkTButton variant="primary" icon="sparkles" onClick={() => navigate("builder")}>
-          Build custom
-        </TalkTButton>
+        <h1 className="h1-app">Pick an interview, or build one.</h1>
       </div>
 
-      <div className="flex items-center gap-3" style={{ marginBottom: 22, flexWrap: "wrap" }}>
-        <div className="relative" style={{ flex: "1 1 240px", minWidth: 200 }}>
+      <div className="flex items-center gap-2" style={{ marginBottom: 22 }}>
+        <div className="relative" style={{ flex: 1, minWidth: 0 }}>
           <Icon name="search" size={16} className="dimmed" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
           <input className="field" placeholder="Search by role or topic" value={query} onChange={(event) => setQuery(event.target.value)} style={{ paddingLeft: 36 }} />
         </div>
-        <div className="flex items-center gap-1" style={{ flexWrap: "wrap" }}>
-          {categories.map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setCategory(item)}
-              className="mono"
-              style={{
-                height: 32,
-                padding: "0 12px",
-                fontSize: 12,
-                cursor: "pointer",
-                border: `1px solid ${category === item ? "var(--border-hover)" : "var(--border)"}`,
-                background: category === item ? "var(--card)" : "transparent",
-                color: category === item ? "var(--foreground)" : "var(--muted-foreground)",
-                transition: "all var(--dur-fast)",
-              }}
-            >
-              {item}
-            </button>
-          ))}
-        </div>
+        <button
+          type="button"
+          onClick={() => setFilterOpen((open) => !open)}
+          className="btn btn-secondary"
+          style={{ position: "relative", gap: 8, background: filterOpen ? "var(--card)" : undefined, borderColor: filterOpen ? "var(--border-hover)" : undefined }}
+          aria-expanded={filterOpen}
+        >
+          <Icon name="filter" size={16} />
+          Filter
+          {activeCount ? (
+            <span className="mono" style={{ minWidth: 18, height: 18, padding: "0 5px", display: "inline-grid", placeItems: "center", fontSize: 10, background: "var(--foreground)", color: "var(--background)" }}>
+              {activeCount}
+            </span>
+          ) : null}
+        </button>
       </div>
+
+      {activeCount ? (
+        <div className="flex items-center gap-2" style={{ marginBottom: 18, flexWrap: "wrap" }}>
+          {Object.entries(filters)
+            .filter(([, value]) => value !== "All")
+            .map(([key, value]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setFilters((current) => ({ ...current, [key]: "All" }))}
+                className="chip card-hover"
+                style={{ cursor: "pointer", color: "var(--foreground)", gap: 6 }}
+              >
+                {value}
+                <Icon name="x" size={12} />
+              </button>
+            ))}
+          <button type="button" onClick={() => setFilters(EMPTY_FILTERS)} className="mono" style={{ background: "none", border: 0, cursor: "pointer", fontSize: 11, color: "var(--muted-foreground)" }}>
+            Clear all
+          </button>
+        </div>
+      ) : null}
 
       <div className="stagger talkt-library-grid" style={{ background: "var(--border)", border: "1px solid var(--border)" }}>
         {filtered.map((interview) => (
@@ -75,10 +120,88 @@ export function LibraryScreen({
       </div>
       {filtered.length === 0 ? (
         <div className="caption" style={{ padding: 48, textAlign: "center" }}>
-          {`No interviews match "${query}".`}
+          No interviews match your filters.
         </div>
       ) : null}
+
+      {filterOpen ? (
+        <FilterPanel
+          filters={filters}
+          options={options}
+          onChange={(key, value) => setFilters((current) => ({ ...current, [key]: value }))}
+          onClear={() => setFilters(EMPTY_FILTERS)}
+          onClose={() => setFilterOpen(false)}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function FilterPanel({
+  filters,
+  options,
+  onChange,
+  onClear,
+  onClose,
+}: {
+  filters: LibraryFilters;
+  options: Record<keyof LibraryFilters, string[]>;
+  onChange: (key: keyof LibraryFilters, value: string) => void;
+  onClear: () => void;
+  onClose: () => void;
+}) {
+  React.useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const groups: { key: keyof LibraryFilters; label: string }[] = [
+    { key: "topic", label: "Topic" },
+    { key: "language", label: "Language" },
+    { key: "length", label: "Length" },
+    { key: "difficulty", label: "Difficulty" },
+    { key: "source", label: "Source" },
+  ];
+
+  return (
+    <aside className="fade-in talkt-filter-panel">
+      <div className="flex items-center justify-between" style={{ padding: "0 6px 14px" }}>
+        <span className="mono-label">Filters</span>
+        <button type="button" onClick={onClose} className="icon-btn" style={{ width: 30, height: 30, border: 0 }} aria-label="Close filters">
+          <Icon name="x" size={15} />
+        </button>
+      </div>
+
+      <nav className="no-scrollbar flex-col" style={{ flex: 1, overflowY: "auto", gap: 1 }}>
+        {groups.map((group) => (
+          <React.Fragment key={group.key}>
+            <div className="tt-nav-label">
+              <span className="mono-label">{group.label}</span>
+            </div>
+            {options[group.key].map((value) => (
+              <button
+                key={value}
+                type="button"
+                className="tt-nav-item"
+                data-active={filters[group.key] === value}
+                onClick={() => onChange(group.key, value)}
+              >
+                <span className="tt-nav-text">{value}</span>
+              </button>
+            ))}
+          </React.Fragment>
+        ))}
+      </nav>
+
+      <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12, marginTop: 12 }}>
+        <TalkTButton variant="secondary" size="sm" className="btn-block" onClick={onClear}>
+          Clear all
+        </TalkTButton>
+      </div>
+    </aside>
   );
 }
 
@@ -191,7 +314,7 @@ export function InterviewDetailScreen({
           <SectionHeader
             num="02"
             label="Question set"
-            right={<span className="mono" style={{ fontSize: 11, color: "var(--dimmed)" }}>{interview.custom ? "Generated by AI builder" : "Ordered · adapts live"}</span>}
+            right={interview.custom ? <span className="mono" style={{ fontSize: 11, color: "var(--dimmed)" }}>Generated by AI builder</span> : undefined}
           />
           <ol style={{ listStyle: "none", margin: 0, padding: 0 }}>
             {interview.questions.map((question, index) => (
@@ -217,7 +340,7 @@ export function InterviewDetailScreen({
                   Interviewer
                 </span>
                 <span className="chip" style={{ height: 20, fontSize: 10 }}>
-                  Assigned
+                  {interviewLanguage(interview)}
                 </span>
               </div>
               <div className="flex items-center gap-3" style={{ padding: 12, border: "1px solid var(--border)", background: "var(--surface-2)" }}>

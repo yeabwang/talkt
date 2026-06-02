@@ -30,14 +30,8 @@ export function DashboardScreen({
 
   return (
     <div className="fade-up talkt-page">
-      <div className="flex items-center justify-between talkt-mobile-stack" style={{ marginBottom: 26, gap: 16 }}>
-        <div className="flex items-center gap-3">
-          <span className="mono-label">Practice log</span>
-          <span className="caption">Welcome back, {firstName}</span>
-        </div>
-        <div className="mono" style={{ fontSize: 12, color: "var(--dimmed)" }}>
-          {todayStr()} · {attempts.length} sessions
-        </div>
+      <div className="flex items-center talkt-mobile-stack" style={{ marginBottom: 26, gap: 16 }}>
+        <span className="caption">Welcome back, {firstName}</span>
       </div>
 
       <div className="card rounded-lg talkt-dashboard-hero" style={{ overflow: "hidden", marginBottom: 44 }}>
@@ -238,8 +232,4 @@ function AttemptRow({ attempt, interview, onOpen, onRetake }: { attempt: Attempt
       </div>
     </div>
   );
-}
-
-function todayStr() {
-  return new Date(2026, 5, 2).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }

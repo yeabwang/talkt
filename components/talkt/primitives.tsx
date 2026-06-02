@@ -5,6 +5,7 @@ import {
   Activity,
   AlertTriangle,
   ArrowLeft,
+  Award,
   ArrowRight,
   BarChart3,
   Briefcase,
@@ -17,6 +18,7 @@ import {
   Code,
   Edit,
   FileText,
+  Filter,
   Grid2X2,
   Headphones,
   Info,
@@ -85,6 +87,7 @@ const ICONS: Record<string, LucideIcon> = {
   moon: Moon,
   captions: Captions,
   search: Search,
+  filter: Filter,
   calendar: Calendar,
   "trending-up": TrendingUp,
   "message-square": MessageSquare,
@@ -109,6 +112,7 @@ const ICONS: Record<string, LucideIcon> = {
   refresh: RefreshCw,
   layers: Layers,
   "thumbs-up": ThumbsUp,
+  award: Award,
 };
 
 export function PixelT({ size = 22, color = "currentColor" }: { size?: number; color?: string }) {

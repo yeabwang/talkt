@@ -13,6 +13,14 @@ const ANALYSIS_STEPS = [
   "Drafting strengths and improvements",
 ];
 
+// Score tier shown in place of a plain "ready" badge.
+function scoreAward(score: number): { label: string; color: string } {
+  if (score >= 85) return { label: "Gold · outstanding", color: "var(--success)" };
+  if (score >= 75) return { label: "Silver · strong", color: "var(--success)" };
+  if (score >= 60) return { label: "Bronze · solid", color: "var(--warn)" };
+  return { label: "Keep practicing", color: "var(--muted-foreground)" };
+}
+
 export function ResultsScreen({
   interview,
   attempt,
@@ -102,14 +110,15 @@ function FeedbackReady({
 }) {
   const date = attempt ? `${attempt.date} · ${attempt.time}` : "2026-06-02 · 14:58";
   const minutes = attempt ? attempt.minutes : interview.minutes;
+  const award = scoreAward(feedback.overall);
 
   return (
     <div className="fade-up talkt-page" style={{ paddingTop: 40 }}>
       <div className="flex items-center justify-between talkt-mobile-stack" style={{ marginBottom: 30, gap: 16 }}>
         <div>
           <div className="flex items-center gap-2" style={{ marginBottom: 10 }}>
-            <span className="flex items-center gap-2 mono" style={{ fontSize: 11, color: "var(--success)" }}>
-              <Icon name="check" size={14} /> Feedback ready
+            <span className="flex items-center gap-2 mono-label" style={{ color: award.color }}>
+              <Icon name="award" size={14} /> {award.label}
             </span>
           </div>
           <h1 className="h1-app" style={{ marginBottom: 8 }}>
@@ -174,8 +183,8 @@ function FeedbackReady({
 
       <SectionHeader num="02" label="What stood out" />
       <div className="talkt-results-evidence" style={{ marginBottom: 40 }}>
-        <EvidenceList title="Strengths" icon="thumbs-up" color="var(--success)" items={feedback.strengths} />
-        <EvidenceList title="Improvements" icon="trending-up" color="var(--warn)" items={feedback.improvements} />
+        <EvidenceList title="Strengths" icon="thumbs-up" color="var(--success)" items={feedback.strengths} showEvidence={false} />
+        <EvidenceList title="Improvements" icon="trending-up" color="var(--warn)" items={feedback.improvements} showEvidence={false} />
       </div>
 
       <SectionHeader num="03" label="Per-question analysis" right={<span className="mono" style={{ fontSize: 11, color: "var(--dimmed)" }}>{feedback.perQuestion.length} questions</span>} />
@@ -197,7 +206,7 @@ function FeedbackReady({
   );
 }
 
-function EvidenceList({ title, icon, color, items }: { title: string; icon: string; color: string; items: FeedbackEvidence[] }) {
+function EvidenceList({ title, icon, color, items, showEvidence = true }: { title: string; icon: string; color: string; items: FeedbackEvidence[]; showEvidence?: boolean }) {
   return (
     <div>
       <div className="flex items-center gap-2" style={{ marginBottom: 16 }}>
@@ -213,9 +222,11 @@ function EvidenceList({ title, icon, color, items }: { title: string; icon: stri
                 <p className="body" style={{ margin: 0, color: "var(--foreground)" }}>
                   {item.text}
                 </p>
-                <p className="mono" style={{ margin: "8px 0 0", fontSize: 12, color: "var(--muted-foreground)", paddingLeft: 12, borderLeft: "2px solid var(--border)", lineHeight: 1.5 }}>
-                  {item.evidence}
-                </p>
+                {showEvidence ? (
+                  <p className="mono" style={{ margin: "8px 0 0", fontSize: 12, color: "var(--muted-foreground)", paddingLeft: 12, borderLeft: "2px solid var(--border)", lineHeight: 1.5 }}>
+                    {item.evidence}
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>
@@ -271,7 +282,7 @@ function QuestionAnalysis({ question, index, last }: { question: QuestionFeedbac
           <div style={{ background: "var(--surface-2)", border: "1px solid var(--border)", padding: 16 }}>
             <div className="flex items-center gap-2" style={{ marginBottom: 8 }}>
               <Icon name="sparkles" size={14} className="muted" />
-              <span className="mono-label">Model answer</span>
+              <span className="mono-label">Suggested answer</span>
             </div>
             <p className="body" style={{ margin: 0, color: "var(--muted-foreground)" }}>
               {question.model}

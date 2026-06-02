@@ -2,8 +2,8 @@
 
 import * as React from "react";
 
-import { VOICES, type AppUser, type Interview } from "@/components/talkt/data";
-import { AgentAvatar, Avatar, Icon, SectionHeader, StatusDot, Waveform, Wordmark } from "@/components/talkt/primitives";
+import { VOICES, interviewLanguage, type AppUser, type Interview } from "@/components/talkt/data";
+import { AgentAvatar, Avatar, Icon, Waveform, Wordmark } from "@/components/talkt/primitives";
 
 const ANSWER_WINDOW = 7600;
 const CLOSING_TEXT = "That's everything I had. Thanks for talking it through - generating your feedback now.";
@@ -27,10 +27,8 @@ export function LiveInterviewScreen({
   const [mode, setMode] = React.useState<"asking" | "answering" | "closing">("asking");
   const [typed, setTyped] = React.useState("");
   const [elapsed, setElapsed] = React.useState(0);
-  const [answerSecs, setAnswerSecs] = React.useState(0);
   const [micOn, setMicOn] = React.useState(true);
-  const [captionsOn, setCaptionsOn] = React.useState(true);
-  const [showQuestions, setShowQuestions] = React.useState(false);
+  const [showTranscript, setShowTranscript] = React.useState(false);
 
   const fullQuestion = mode === "closing" ? CLOSING_TEXT : questions[idx];
   const beginQuestion = React.useCallback(
@@ -60,10 +58,7 @@ export function LiveInterviewScreen({
         if (closing) {
           window.setTimeout(() => onEnd(), 1600);
         } else {
-          window.setTimeout(() => {
-            setAnswerSecs(0);
-            setMode("answering");
-          }, 550);
+          window.setTimeout(() => setMode("answering"), 550);
         }
       }
     }, 26);
@@ -72,12 +67,8 @@ export function LiveInterviewScreen({
 
   React.useEffect(() => {
     if (mode !== "answering") return;
-    const tick = window.setInterval(() => setAnswerSecs((seconds) => seconds + 1), 1000);
     const advance = window.setTimeout(() => beginQuestion(idx + 1), ANSWER_WINDOW);
-    return () => {
-      window.clearInterval(tick);
-      window.clearTimeout(advance);
-    };
+    return () => window.clearTimeout(advance);
   }, [beginQuestion, mode, idx]);
 
   const skip = () => {
@@ -86,6 +77,22 @@ export function LiveInterviewScreen({
 
   const aiSpeaking = mode === "asking" || mode === "closing";
   const youSpeaking = mode === "answering" && micOn;
+
+  // Running conversation transcript shown in the right panel.
+  const transcript = React.useMemo(() => {
+    const turns: { who: string; role: "interviewer" | "you"; text: string }[] = [];
+    const answered = Math.min(idx, total);
+    for (let i = 0; i < answered; i += 1) {
+      turns.push({ who: voice.name, role: "interviewer", text: questions[i] });
+      turns.push({ who: user.name, role: "you", text: "[Spoken answer captured]" });
+    }
+    if (idx < total) {
+      turns.push({ who: voice.name, role: "interviewer", text: questions[idx] });
+      if (mode === "answering") turns.push({ who: user.name, role: "you", text: "Listening to your answer…" });
+    }
+    if (mode === "closing") turns.push({ who: voice.name, role: "interviewer", text: CLOSING_TEXT });
+    return turns;
+  }, [idx, total, mode, questions, voice.name, user.name]);
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--background)", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}>
@@ -96,13 +103,17 @@ export function LiveInterviewScreen({
           <span style={{ fontSize: 13, fontWeight: 500 }}>{interview.title}</span>
         </div>
         <div className="flex items-center gap-4">
-          <span className="flex items-center gap-2 mono" style={{ fontSize: 12, color: "var(--error)" }}>
-            <StatusDot color="var(--error)" pulse size={7} /> REC
-          </span>
           <span className="mono" style={{ fontSize: 13, color: "var(--foreground)" }}>
             {fmt(elapsed)}
           </span>
-          <button type="button" onClick={() => setShowQuestions((shown) => !shown)} className="icon-btn" aria-label="Questions" style={{ width: 34, height: 34 }}>
+          <button
+            type="button"
+            onClick={() => setShowTranscript((shown) => !shown)}
+            className="icon-btn"
+            aria-label="Transcript"
+            aria-expanded={showTranscript}
+            style={{ width: 34, height: 34, background: showTranscript ? "var(--card)" : undefined, borderColor: showTranscript ? "var(--border-hover)" : undefined }}
+          >
             <Icon name="list" size={16} />
           </button>
         </div>
@@ -137,69 +148,52 @@ export function LiveInterviewScreen({
           <div className="text-center" style={{ maxWidth: 760, width: "100%" }}>
             <div className="flex items-center justify-center gap-3" style={{ marginBottom: 16 }}>
               <span className="mono-label">{mode === "closing" ? "Closing" : `Question ${idx + 1} of ${total}`}</span>
-              {mode === "answering" ? (
-                <span className="flex items-center gap-2 mono" style={{ fontSize: 11, color: "var(--success)" }}>
-                  <StatusDot color="var(--success)" pulse /> Listening · {fmt(answerSecs)}
-                </span>
-              ) : null}
             </div>
             <p className="h2" style={{ fontWeight: 500, lineHeight: 1.32, minHeight: 64 }}>
               {typed}
               {aiSpeaking && typed.length < fullQuestion.length ? <span className="cursor-blink" /> : null}
             </p>
-            {mode === "answering" ? (
-              <div style={{ maxWidth: 320, margin: "20px auto 0" }}>
-                <AutoAdvanceBar key={idx} ms={ANSWER_WINDOW} />
-                <div className="mono" style={{ fontSize: 10.5, color: "var(--dimmed)", marginTop: 8, letterSpacing: "0.08em" }}>
-                  THE INTERVIEWER MOVES ON WHEN YOU PAUSE
-                </div>
-              </div>
-            ) : null}
           </div>
         </div>
 
-        {showQuestions ? (
-          <aside className="fade-in no-scrollbar" style={{ width: 300, borderLeft: "1px solid var(--border)", background: "var(--sidebar)", overflowY: "auto", padding: "22px 20px" }}>
-            <SectionHeader label="Question set" />
-            <ol style={{ listStyle: "none", margin: 0, padding: 0 }}>
-              {questions.map((question, index) => (
-                <li key={question} className="flex gap-3" style={{ padding: "11px 0", borderBottom: "1px solid var(--border)", alignItems: "baseline", opacity: index < idx ? 0.45 : 1 }}>
-                  <span className="mono" style={{ fontSize: 11, color: index === idx ? "var(--foreground)" : "var(--dimmed)", width: 20, flexShrink: 0 }}>
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <span style={{ fontSize: 13, color: index === idx ? "var(--foreground)" : "var(--muted-foreground)", fontWeight: index === idx ? 500 : 400 }}>
-                    {question}
-                    {index < idx ? <Icon name="check" size={13} style={{ marginLeft: 6, color: "var(--success)", display: "inline" }} /> : null}
-                  </span>
-                </li>
-              ))}
-            </ol>
+        {showTranscript ? (
+          <aside className="fade-in no-scrollbar" style={{ width: 320, borderLeft: "1px solid var(--border)", background: "var(--sidebar)", overflowY: "auto", padding: "18px 20px" }}>
+            <div className="flex items-center justify-between" style={{ marginBottom: 18 }}>
+              <span className="mono-label">Transcript</span>
+              <button type="button" onClick={() => setShowTranscript(false)} className="icon-btn" style={{ width: 30, height: 30, border: 0 }} aria-label="Close transcript">
+                <Icon name="x" size={15} />
+              </button>
+            </div>
+            {transcript.length ? (
+              <div className="flex-col" style={{ display: "flex", gap: 16 }}>
+                {transcript.map((turn, index) => (
+                  <div key={index}>
+                    <div className="mono" style={{ fontSize: 11, color: turn.role === "interviewer" ? "var(--muted-foreground)" : "var(--dimmed)" }}>
+                      {turn.who}
+                    </div>
+                    <p className="caption" style={{ margin: "3px 0 0", color: "var(--foreground)" }}>
+                      {turn.text}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="caption" style={{ margin: 0 }}>
+                The conversation transcript appears here as you talk.
+              </p>
+            )}
           </aside>
         ) : null}
       </div>
 
-      {captionsOn ? (
-        <div className="flex justify-center" style={{ padding: "0 24px 16px" }}>
-          <div style={{ maxWidth: 640, width: "100%", textAlign: "center", background: "var(--card)", border: "1px solid var(--border)", padding: "10px 16px" }}>
-            <span className="mono" style={{ fontSize: 11, color: "var(--dimmed)" }}>
-              {aiSpeaking ? voice.name : user.name}
-            </span>
-            <p className="caption" style={{ margin: "2px 0 0", color: "var(--foreground)" }}>
-              {aiSpeaking ? typed || "..." : micOn ? "Listening to your answer..." : "Microphone muted"}
-            </p>
-          </div>
-        </div>
-      ) : null}
-
       <div className="flex items-center justify-center" style={{ padding: "16px 24px", borderTop: "1px solid var(--border)", gap: 12, position: "relative" }}>
         <div className="flex items-center gap-2" style={{ position: "absolute", left: 26 }}>
           <span className="mono" style={{ fontSize: 11, color: "var(--dimmed)" }}>
-            {voice.name} · interviewer
+            {interviewLanguage(interview)}
           </span>
         </div>
 
         <CtrlBtn icon={micOn ? "mic" : "mic-off"} on={micOn} danger={!micOn} onClick={() => setMicOn((value) => !value)} label="Toggle mic" />
-        <CtrlBtn icon="captions" on={captionsOn} onClick={() => setCaptionsOn((value) => !value)} label="Captions" />
         <button className="btn btn-danger" type="button" onClick={onCancel} style={{ width: 58, height: 48, padding: 0 }} aria-label="End call">
           <Icon name="phone" size={20} style={{ transform: "rotate(135deg)" }} />
         </button>
@@ -289,20 +283,6 @@ function Tile({
           {status}
         </span>
       </div>
-    </div>
-  );
-}
-
-function AutoAdvanceBar({ ms }: { ms: number }) {
-  const [width, setWidth] = React.useState(0);
-  React.useEffect(() => {
-    const frame = requestAnimationFrame(() => setWidth(100));
-    return () => cancelAnimationFrame(frame);
-  }, []);
-
-  return (
-    <div style={{ height: 2, background: "var(--border)", width: "100%" }}>
-      <div style={{ height: "100%", width: `${width}%`, background: "var(--muted-foreground)", transition: `width ${ms}ms linear` }} />
     </div>
   );
 }

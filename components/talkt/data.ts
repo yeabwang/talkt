@@ -31,6 +31,7 @@ export interface Interview {
   blurb: string;
   questions: string[];
   custom?: boolean;
+  language?: string;
 }
 
 export interface Attempt {
@@ -69,6 +70,14 @@ export interface Feedback {
   strengths: FeedbackEvidence[];
   improvements: FeedbackEvidence[];
   perQuestion: QuestionFeedback[];
+}
+
+// Languages a custom interview can be generated, conducted, and scored in.
+export const LANGUAGES: string[] = ["English", "Spanish", "French", "German", "Portuguese", "Mandarin", "Hindi", "Arabic", "Japanese"];
+
+// The language an interview runs in; templates default to English.
+export function interviewLanguage(interview: Interview): string {
+  return interview.language ?? "English";
 }
 
 export const VOICES: Voice[] = [
@@ -302,6 +311,46 @@ export const CUSTOM_INTERVIEWS: Interview[] = [
     ],
   },
 ];
+
+export interface UsageBreakdownRow {
+  interviewId: string;
+  title: string;
+  attempts: number;
+  minutes: number;
+  tokens: number;
+}
+
+export interface UsageSummary {
+  planLabel: string;
+  minutes: number;
+  minutesLimit: number;
+  tokens: number;
+  tokensLimit: number;
+  interviews: number;
+  estCost: number;
+  costBudget: number;
+  /* Minutes per session, oldest -> newest, for the over-time chart */
+  trend: number[];
+  breakdown: UsageBreakdownRow[];
+}
+
+export const USAGE: UsageSummary = {
+  planLabel: "Free plan",
+  minutes: 112,
+  minutesLimit: 300,
+  tokens: 248_000,
+  tokensLimit: 500_000,
+  interviews: 5,
+  estCost: 3.1,
+  costBudget: 10,
+  trend: [27, 23, 21, 24, 17],
+  breakdown: [
+    { interviewId: "fe-react", title: "Frontend engineer", attempts: 2, minutes: 47, tokens: 104_000 },
+    { interviewId: "consult", title: "Consulting case", attempts: 1, minutes: 27, tokens: 61_000 },
+    { interviewId: "pm-sense", title: "Product manager", attempts: 1, minutes: 21, tokens: 46_000 },
+    { interviewId: "behavioral", title: "Behavioral & leadership", attempts: 1, minutes: 17, tokens: 37_000 },
+  ],
+};
 
 export const ATTEMPTS: Attempt[] = [
   { id: "a1", interviewId: "behavioral", title: "Behavioral & leadership", date: "2026-06-01", time: "14:32", minutes: 17, overall: 82, voice: "adi" },

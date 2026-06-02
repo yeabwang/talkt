@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { VOICES, type Interview } from "@/components/talkt/data";
+import { LANGUAGES, VOICES, type Interview } from "@/components/talkt/data";
 import type { TalkTRoute } from "@/components/talkt/app-shell";
 import { AgentAvatar, Icon, SectionHeader, StatusDot, TalkTButton } from "@/components/talkt/primitives";
 
@@ -13,6 +13,7 @@ interface BuilderDraft {
   count: number;
   minutes: number;
   voice: string;
+  language: string;
   questions: string[] | null;
 }
 
@@ -58,6 +59,7 @@ const initialDraft: BuilderDraft = {
   count: 8,
   minutes: 25,
   voice: "ren",
+  language: "English",
   questions: null,
 };
 
@@ -149,6 +151,7 @@ export function BuilderScreen({
       source: "Custom",
       takes: 0,
       voice: draft.voice,
+      language: draft.language,
       custom: true,
       blurb: "Generated from your brief in the builder.",
       questions: draft.questions,
@@ -213,6 +216,27 @@ export function BuilderScreen({
           Interview draft
         </div>
 
+        <div style={{ marginBottom: 18 }}>
+          <span className="mono-label" style={{ display: "block", marginBottom: 8 }}>
+            Language
+          </span>
+          <select
+            className="field"
+            value={draft.language}
+            onChange={(event) => setDraft((current) => ({ ...current, language: event.target.value }))}
+            style={{ appearance: "auto" }}
+          >
+            {LANGUAGES.map((language) => (
+              <option key={language} value={language}>
+                {language}
+              </option>
+            ))}
+          </select>
+          <p className="caption" style={{ marginTop: 7, fontSize: 12 }}>
+            Questions, the interview, and your report use this language.
+          </p>
+        </div>
+
         <div className="card rounded-lg" style={{ padding: 18, marginBottom: 18 }}>
           <div className="flex items-center gap-3" style={{ marginBottom: 16 }}>
             <div style={{ width: 38, height: 38, display: "grid", placeItems: "center", border: "1px solid var(--border)" }}>
@@ -224,6 +248,7 @@ export function BuilderScreen({
             </div>
           </div>
           <div className="flex-col" style={{ gap: 0 }}>
+            <DraftRow label="Language" value={draft.language} />
             <DraftRow label="Focus" value={draft.focus.length ? draft.focus.join(" · ") : "-"} />
             <DraftRow label="Questions" value={draft.questions ? draft.questions.length : draft.count} />
             <DraftRow label="Duration" value={`~${draft.minutes} min`} />
