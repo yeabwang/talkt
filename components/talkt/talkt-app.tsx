@@ -100,7 +100,7 @@ export function TalkTApp() {
         interview={active}
         user={user}
         onEnd={() => navigate("results", { interview: active })}
-        onCancel={() => navigate("results", { interview: active })}
+        onCancel={() => navigate("dashboard")}
       />
     );
   }

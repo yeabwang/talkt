@@ -69,7 +69,7 @@ export function LobbyScreen({
               <div className="bg-dot-grid" style={{ position: "absolute", inset: 0, opacity: 0.5 }} />
               {phase === "connecting" ? (
                 <div className="relative text-center fade-in">
-                  <div style={{ marginBottom: 18 }}>
+                  <div style={{ marginBottom: 18, display: "flex", justifyContent: "center" }}>
                     <AgentAvatar size={64} active />
                   </div>
                   <div className="flex items-center justify-center gap-2 mono" style={{ color: "var(--on-tile)", fontSize: 13 }}>
@@ -94,12 +94,6 @@ export function LobbyScreen({
                   </div>
                 </div>
               )}
-
-              <div className="relative" style={{ position: "absolute", top: 12, left: 14 }}>
-                <span className="mono" style={{ fontSize: 11, color: "var(--on-tile)", opacity: 0.7 }}>
-                  Camera not needed - voice only
-                </span>
-              </div>
 
               {phase === "ready" ? (
                 <div style={{ position: "absolute", bottom: 14, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 10 }}>

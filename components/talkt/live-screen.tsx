@@ -28,6 +28,7 @@ export function LiveInterviewScreen({
   const [typed, setTyped] = React.useState("");
   const [elapsed, setElapsed] = React.useState(0);
   const [micOn, setMicOn] = React.useState(true);
+  const [captionsOn, setCaptionsOn] = React.useState(true);
   const [showTranscript, setShowTranscript] = React.useState(false);
 
   const fullQuestion = mode === "closing" ? CLOSING_TEXT : questions[idx];
@@ -145,15 +146,17 @@ export function LiveInterviewScreen({
             />
           </div>
 
-          <div className="text-center" style={{ maxWidth: 760, width: "100%" }}>
-            <div className="flex items-center justify-center gap-3" style={{ marginBottom: 16 }}>
-              <span className="mono-label">{mode === "closing" ? "Closing" : `Question ${idx + 1} of ${total}`}</span>
+          {captionsOn ? (
+            <div className="text-center" style={{ maxWidth: 760, width: "100%" }}>
+              <div className="flex items-center justify-center gap-3" style={{ marginBottom: 16 }}>
+                <span className="mono-label">{mode === "closing" ? "Closing" : `Question ${idx + 1} of ${total}`}</span>
+              </div>
+              <p style={{ fontSize: "clamp(16px, 1.9vw, 20px)", fontWeight: 500, letterSpacing: "-0.01em", lineHeight: 1.4, minHeight: 40, margin: 0 }}>
+                {typed}
+                {aiSpeaking && typed.length < fullQuestion.length ? <span className="cursor-blink" /> : null}
+              </p>
             </div>
-            <p className="h2" style={{ fontWeight: 500, lineHeight: 1.32, minHeight: 64 }}>
-              {typed}
-              {aiSpeaking && typed.length < fullQuestion.length ? <span className="cursor-blink" /> : null}
-            </p>
-          </div>
+          ) : null}
         </div>
 
         {showTranscript ? (
@@ -188,24 +191,25 @@ export function LiveInterviewScreen({
 
       <div className="flex items-center justify-center" style={{ padding: "16px 24px", borderTop: "1px solid var(--border)", gap: 12, position: "relative" }}>
         <div className="flex items-center gap-2" style={{ position: "absolute", left: 26 }}>
-          <span className="mono" style={{ fontSize: 11, color: "var(--dimmed)" }}>
+          <span className="mono" style={{ fontSize: 11, color: "var(--foreground)" }}>
             {interviewLanguage(interview)}
           </span>
         </div>
 
         <CtrlBtn icon={micOn ? "mic" : "mic-off"} on={micOn} danger={!micOn} onClick={() => setMicOn((value) => !value)} label="Toggle mic" />
+        <CtrlBtn icon="captions" on={captionsOn} onClick={() => setCaptionsOn((value) => !value)} label={captionsOn ? "Hide captions" : "Show captions"} />
         <button className="btn btn-danger" type="button" onClick={onCancel} style={{ width: 58, height: 48, padding: 0 }} aria-label="End call">
           <Icon name="phone" size={20} style={{ transform: "rotate(135deg)" }} />
         </button>
 
         <div className="flex items-center gap-3" style={{ position: "absolute", right: 26 }}>
           {mode === "answering" ? (
-            <button type="button" onClick={skip} className="flex items-center gap-2 mono btn-ghost" style={{ height: 34, padding: "0 10px", fontSize: 11, cursor: "pointer", border: 0, background: "transparent", color: "var(--muted-foreground)" }}>
+            <button type="button" onClick={skip} className="flex items-center gap-2 mono btn-ghost" style={{ height: 34, padding: "0 10px", fontSize: 11, cursor: "pointer", border: 0, background: "transparent", color: "var(--foreground)" }}>
               Skip ahead <Icon name="chevron-right" size={14} />
             </button>
           ) : null}
           {mode === "asking" ? (
-            <span className="mono" style={{ fontSize: 11, color: "var(--dimmed)" }}>
+            <span className="mono" style={{ fontSize: 11, color: "var(--muted-foreground)" }}>
               Interviewer is speaking...
             </span>
           ) : null}
