@@ -4,7 +4,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 
 async function main() {
-  const { prisma } = await import("../lib/db");
+  const { prisma } = await import("../lib/prisma");
   const counts = {
     users: await prisma.user.count(),
     interviews: await prisma.interview.count(),

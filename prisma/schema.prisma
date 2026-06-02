@@ -49,8 +49,10 @@ model Interview {
   difficulty  String?
   type        InterviewType @default(custom)
   visibility  Visibility    @default(private)
+  language    String        @default("en") // ISO 639-1; controls question gen, interviewer voice, report
+  dimensions  Json          @default("[]") // 4 core scoring dims LLM picks per role: [{ key, label, weight? }]
   questions   Json // ordered Question[]: { id, text, idealAnswerHint? }
-  voiceConfig Json? // { voiceId, language }
+  voiceConfig Json? // { voiceId } — language promoted to its own column
   createdAt   DateTime      @default(now())
 
   attempts Attempt[]
@@ -82,7 +84,7 @@ model Feedback {
   attemptId       String   @unique
   attempt         Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   overallScore    Float
-  dimensionScores Json // { communication, technical, structure, confidence, ... }
+  dimensionScores Json // scores keyed to Interview.dimensions: { [dimKey]: score }
   strengths       String[]
   improvements    String[]
   perQuestion     Json // [{ questionId, ratingScore, modelAnswer, critique }]
