@@ -235,10 +235,10 @@
 /* ─── Typography helpers ───────────────────────────── */
 @layer components {
   .h1-hero {
-    font-size: clamp(40px, 5vw, 60px);
+    font-size: clamp(38px, 4.4vw, 52px);
     font-weight: 600;
     letter-spacing: -0.03em;
-    line-height: 1.02;
+    line-height: 1.04;
   }
   .h1-app {
     font-size: 31px;
@@ -621,6 +621,14 @@ html.anim .stagger > *:nth-child(8) { animation-delay: 420ms; }
   min-height: 100vh;
   display: grid;
   grid-template-columns: minmax(0, 45fr) minmax(0, 55fr);
+}
+.auth-footer-link {
+  transition: color 0.15s ease;
+}
+.auth-footer-link:hover {
+  color: var(--foreground);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .talkt-app-shell {
   min-height: 100vh;

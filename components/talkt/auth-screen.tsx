@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 
 import type { AppUser } from "@/components/talkt/data";
 import { TalkTButton, Wordmark } from "@/components/talkt/primitives";
@@ -48,7 +49,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (user: AppUser) => void }) 
           <Wordmark size={22} />
         </div>
 
-        <div className="relative" style={{ maxWidth: 420 }}>
+        <div className="relative" style={{ maxWidth: 520 }}>
           <div className="mono-label" style={{ marginBottom: 18 }}>
             Spoken interview practice
           </div>
@@ -56,14 +57,14 @@ export function AuthScreen({ onAuthed }: { onAuthed: (user: AppUser) => void }) 
             Practice the interview out loud.
           </h1>
           <p className="body-lg muted" style={{ margin: 0 }}>
-            Real-time voice interviews with an AI interviewer, scored the moment you hang up. Pick a
-            template or build your own - for any role.
+            Walk in ready. Rehearse out loud with an AI interviewer and get scored the moment you
+            hang up. Any role.
           </p>
           <div style={{ display: "flex", gap: 28, marginTop: 36, flexWrap: "wrap" }}>
             {[
-              ["Templates", "40+"],
-              ["Avg. setup", "< 1 min"],
-              ["Feedback", "Seconds"],
+              ["Questions", "1,000+"],
+              ["Industries", "200+"],
+              ["Interviews", "900+"],
             ].map(([label, value]) => (
               <div key={label}>
                 <div className="stat-value" style={{ fontSize: 22 }}>
@@ -77,9 +78,17 @@ export function AuthScreen({ onAuthed }: { onAuthed: (user: AppUser) => void }) 
           </div>
         </div>
 
-        <div className="relative mono" style={{ fontSize: 12, color: "var(--dimmed)" }}>
-          Voice · Templates · Custom builder · Scored feedback
-        </div>
+        <nav className="relative mono flex" style={{ fontSize: 12, color: "var(--dimmed)", gap: 18 }}>
+          {[
+            ["About", "/about"],
+            ["Pricing", "/pricing"],
+            ["Feedback", "/feedback"],
+          ].map(([label, href]) => (
+            <Link key={href} href={href} style={{ color: "inherit", textDecoration: "none" }} className="auth-footer-link">
+              {label}
+            </Link>
+          ))}
+        </nav>
       </aside>
 
       <main style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 40, minHeight: "100vh" }}>
@@ -87,12 +96,14 @@ export function AuthScreen({ onAuthed }: { onAuthed: (user: AppUser) => void }) 
           <div className="mono-label" style={{ marginBottom: 14 }}>
             {isSignup ? "01 · Create account" : "01 · Welcome back"}
           </div>
-          <h2 className="h1-app" style={{ marginBottom: 8 }}>
+          <h2 className="h1-app" style={{ marginBottom: isSignup ? 28 : 8 }}>
             {isSignup ? "Start practicing" : "Sign in to TalkT"}
           </h2>
-          <p className="caption" style={{ marginBottom: 28 }}>
-            {isSignup ? "Your attempts and feedback stay private to you." : "Pick up where you left off."}
-          </p>
+          {isSignup ? null : (
+            <p className="caption" style={{ marginBottom: 28 }}>
+              Pick up where you left off.
+            </p>
+          )}
 
           <form onSubmit={submit} className="flex-col" style={{ gap: 14 }}>
             <button type="button" className="btn btn-secondary btn-block" onClick={completeAuth} style={{ height: 44, gap: 10 }}>
@@ -152,7 +163,15 @@ export function AuthScreen({ onAuthed }: { onAuthed: (user: AppUser) => void }) 
             </button>
           </p>
           <p className="mono" style={{ marginTop: 36, fontSize: 11, color: "var(--dimmed)" }}>
-            Secured by Clerk · By continuing you agree to the terms.
+            By continuing you agree to the{" "}
+            <Link href="/terms" className="auth-footer-link" style={{ color: "var(--foreground)", textUnderlineOffset: 3 }}>
+              terms
+            </Link>{" "}
+            and{" "}
+            <Link href="/privacy" className="auth-footer-link" style={{ color: "var(--foreground)", textUnderlineOffset: 3 }}>
+              privacy
+            </Link>
+            .
           </p>
         </div>
       </main>
