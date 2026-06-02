@@ -113,7 +113,7 @@ export function LiveInterviewScreen({
       </div>
 
       <div className="grow flex" style={{ minHeight: 0 }}>
-        <div className="grow flex-col items-center justify-center" style={{ padding: "28px 24px", gap: 30, minWidth: 0 }}>
+        <div className="grow flex flex-col items-center justify-center" style={{ padding: "clamp(20px, 3vh, 34px) 24px", gap: 28, minWidth: 0, minHeight: 0 }}>
           <div className="talkt-live-tiles">
             <Tile
               active={aiSpeaking}
@@ -134,7 +134,7 @@ export function LiveInterviewScreen({
             />
           </div>
 
-          <div className="text-center" style={{ maxWidth: 700, width: "100%" }}>
+          <div className="text-center" style={{ maxWidth: 760, width: "100%" }}>
             <div className="flex items-center justify-center gap-3" style={{ marginBottom: 16 }}>
               <span className="mono-label">{mode === "closing" ? "Closing" : `Question ${idx + 1} of ${total}`}</span>
               {mode === "answering" ? (

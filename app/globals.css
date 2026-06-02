@@ -659,10 +659,11 @@ html.anim .stagger > *:nth-child(8) { animation-delay: 420ms; }
 }
 .talkt-live-tiles {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 470px));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 22px;
-  width: 100%;
-  max-width: 980px;
+  width: min(100%, 1120px);
+  max-width: 1120px;
+  margin: 0 auto;
 }
 .talkt-results-evidence {
   display: grid;
