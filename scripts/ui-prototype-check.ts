@@ -6,7 +6,6 @@ const root = process.cwd();
 const requiredFiles = [
   "components/talkt/data.ts",
   "components/talkt/primitives.tsx",
-  "components/talkt/auth-screen.tsx",
   "components/talkt/app-shell.tsx",
   "components/talkt/dashboard-screen.tsx",
   "components/talkt/library-screen.tsx",

@@ -1,9 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { useClerk, useUser } from "@clerk/nextjs";
 
 import { AppShell, type TalkTRoute } from "@/components/talkt/app-shell";
-import { AuthScreen } from "@/components/talkt/auth-screen";
 import { BuilderScreen } from "@/components/talkt/builder-screen";
 import { ATTEMPTS, CUSTOM_INTERVIEWS, TEMPLATES, type AppUser, type Interview } from "@/components/talkt/data";
 import { DashboardScreen } from "@/components/talkt/dashboard-screen";
@@ -18,24 +18,27 @@ import { UsageScreen } from "@/components/talkt/usage-screen";
 type Theme = "dark" | "light";
 
 export function TalkTApp() {
+  const { isLoaded, user: clerkUser } = useUser();
+  const { signOut: clerkSignOut } = useClerk();
   const [theme, setTheme] = React.useState<Theme>("dark");
-  const [user, setUser] = React.useState<AppUser | null>(null);
   const [route, setRoute] = React.useState<TalkTRoute>("dashboard");
   const [params, setParams] = React.useState<Record<string, unknown>>({});
   const [sessionInterviews, setSessionInterviews] = React.useState<Interview[]>(CUSTOM_INTERVIEWS);
   const attempts = ATTEMPTS;
 
+  const user = React.useMemo<AppUser | null>(() => {
+    if (!clerkUser) return null;
+    const email = clerkUser.primaryEmailAddress?.emailAddress ?? "";
+    return {
+      name: clerkUser.fullName ?? clerkUser.username ?? (email || "TalkT user"),
+      email,
+    };
+  }, [clerkUser]);
+
   React.useEffect(() => {
     const timer = window.setTimeout(() => {
       const savedTheme = window.localStorage.getItem("talkt-theme");
       if (savedTheme === "dark" || savedTheme === "light") setTheme(savedTheme);
-
-      try {
-        const savedUser = window.localStorage.getItem("talkt-user");
-        if (savedUser) setUser(JSON.parse(savedUser) as AppUser);
-      } catch {
-        window.localStorage.removeItem("talkt-user");
-      }
     }, 0);
 
     return () => window.clearTimeout(timer);
@@ -62,16 +65,8 @@ export function TalkTApp() {
     window.scrollTo(0, 0);
   }, []);
 
-  const authed = (nextUser: AppUser) => {
-    setUser(nextUser);
-    window.localStorage.setItem("talkt-user", JSON.stringify(nextUser));
-    setRoute("dashboard");
-  };
-
   const signOut = () => {
-    setUser(null);
-    window.localStorage.removeItem("talkt-user");
-    setRoute("dashboard");
+    void clerkSignOut({ redirectUrl: "/sign-in" });
   };
 
   const startInterview = (interview: Interview) => {
@@ -82,7 +77,9 @@ export function TalkTApp() {
     setRoute("lobby");
   };
 
-  if (!user) return <AuthScreen onAuthed={authed} />;
+  // "/" is protected by proxy.ts, so a reaching user is authenticated; this
+  // only guards the brief pre-hydration window before Clerk resolves.
+  if (!isLoaded || !user) return null;
 
   const paramInterview = params.interview as Interview | undefined;
   const paramInterviewId = params.interviewId as string | undefined;
