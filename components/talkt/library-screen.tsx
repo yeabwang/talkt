@@ -2,9 +2,12 @@
 
 import * as React from "react";
 
-import { VOICES, interviewLanguage, type Interview } from "@/components/talkt/data";
+import { publishInterview } from "@/components/talkt/api";
+import { VOICES, interviewLanguage, type AppUser, type Interview } from "@/components/talkt/data";
 import type { TalkTRoute } from "@/components/talkt/app-shell";
 import { AgentAvatar, Icon, SectionHeader, TalkTButton, categoryIcon } from "@/components/talkt/primitives";
+import { PublishDialog } from "@/components/talkt/publish-dialog";
+import { VoteControl } from "@/components/talkt/vote-control";
 
 interface LibraryFilters {
   topic: string;
@@ -27,10 +30,12 @@ export function LibraryScreen({
   navigate,
   startInterview,
   allInterviews,
+  recommended = [],
 }: {
   navigate: (route: TalkTRoute, params?: Record<string, unknown>) => void;
   startInterview: (interview: Interview) => void;
   allInterviews: Interview[];
+  recommended?: Interview[];
 }) {
   const [query, setQuery] = React.useState("");
   const [filters, setFilters] = React.useState<LibraryFilters>(EMPTY_FILTERS);
@@ -67,6 +72,18 @@ export function LibraryScreen({
         </div>
         <h1 className="h1-app">Pick an interview, or build one.</h1>
       </div>
+
+      {recommended.length >= 3 ? (
+        <div style={{ marginBottom: 34 }}>
+          <SectionHeader label="For you" />
+          <div className="stagger talkt-library-grid" style={{ background: "var(--border)", border: "1px solid var(--border)" }}>
+            {recommended.slice(0, 3).map((interview) => (
+              <TemplateCard key={`rec-${interview.id}`} interview={interview} onOpen={() => navigate("detail", { interviewId: interview.id })} onStart={() => startInterview(interview)} />
+            ))}
+            <div style={{ background: "var(--background)" }} />
+          </div>
+        </div>
+      ) : null}
 
       <div className="flex items-center gap-2" style={{ marginBottom: 22 }}>
         <div className="relative" style={{ flex: 1, minWidth: 0 }}>
@@ -232,10 +249,15 @@ function TemplateCard({ interview, onOpen, onStart }: { interview: Interview; on
           {interview.blurb}
         </div>
       </div>
+      <AuthorCredit interview={interview} />
       <div className="flex items-center justify-between talkt-mobile-stack" style={{ gap: 12 }}>
-        <span className="mono" style={{ fontSize: 11, color: "var(--dimmed)" }}>
-          {interview.count} questions · ~{interview.minutes} min
-        </span>
+        <VoteControl
+          interviewId={interview.id}
+          upvotes={interview.upvotes}
+          downvotes={interview.downvotes}
+          myVote={interview.myVote}
+          disabled={interview.mine}
+        />
         <div className="flex items-center gap-2">
           <TalkTButton variant="ghost" size="sm" onClick={onOpen}>
             Details
@@ -245,6 +267,22 @@ function TemplateCard({ interview, onOpen, onStart }: { interview: Interview; on
           </TalkTButton>
         </div>
       </div>
+      <span className="mono" style={{ fontSize: 11, color: "var(--dimmed)" }}>
+        {interview.count} questions · ~{interview.minutes} min
+      </span>
+    </div>
+  );
+}
+
+// Small author attribution shown on cards and the detail page. Anonymous
+// publications read as "Community"; curated templates as "TalkT".
+function AuthorCredit({ interview }: { interview: Interview }) {
+  const label = interview.anonymous ? "Community" : interview.author;
+  if (!label) return null;
+  return (
+    <div className="flex items-center gap-1 mono" style={{ fontSize: 11, color: "var(--muted-foreground)" }}>
+      <Icon name="user" size={12} />
+      {interview.anonymous ? "Community" : `by ${label}`}
     </div>
   );
 }
@@ -253,12 +291,38 @@ export function InterviewDetailScreen({
   interview,
   navigate,
   startInterview,
+  user,
 }: {
   interview: Interview;
   navigate: (route: TalkTRoute, params?: Record<string, unknown>) => void;
   startInterview: (interview: Interview) => void;
+  user?: AppUser;
 }) {
   const [difficulty, setDifficulty] = React.useState("listed");
+  const [pub, setPub] = React.useState({
+    published: Boolean(interview.published),
+    anonymous: Boolean(interview.anonymous),
+    authorName: interview.authorName ?? null,
+  });
+  const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [publishing, setPublishing] = React.useState(false);
+  const [publishError, setPublishError] = React.useState<string | null>(null);
+
+  const canPublish = Boolean(interview.mine) && !pub.published;
+
+  const onConfirmPublish = async (opts: { displayName?: string; anonymous: boolean }) => {
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      const updated = await publishInterview(interview.id, opts);
+      setPub({ published: true, anonymous: Boolean(updated.anonymous), authorName: updated.authorName ?? null });
+      setDialogOpen(false);
+    } catch (err) {
+      setPublishError(err instanceof Error ? err.message : "Could not publish. Try again.");
+    } finally {
+      setPublishing(false);
+    }
+  };
   const voice = VOICES.find((item) => item.id === interview.voice) ?? VOICES[0];
   const howItRuns = [
     { icon: "phone", title: "Join a voice call", desc: "A browser call opens - no phone number, no scheduling." },
@@ -280,9 +344,30 @@ export function InterviewDetailScreen({
       <h1 className="h1-app" style={{ marginBottom: 10, maxWidth: 620 }}>
         {interview.title}
       </h1>
-      <p className="body-lg muted" style={{ maxWidth: 560, marginBottom: 26 }}>
+      <p className="body-lg muted" style={{ maxWidth: 560, marginBottom: 22 }}>
         {interview.blurb}
       </p>
+
+      <div className="flex items-center" style={{ gap: 16, marginBottom: 30, flexWrap: "wrap" }}>
+        <VoteControl
+          interviewId={interview.id}
+          upvotes={interview.upvotes}
+          downvotes={interview.downvotes}
+          myVote={interview.myVote}
+          disabled={interview.mine}
+          size="md"
+        />
+        <AuthorCredit interview={{ ...interview, anonymous: pub.anonymous, author: pub.authorName ?? interview.author }} />
+        {canPublish ? (
+          <TalkTButton variant="secondary" size="sm" icon="shield" onClick={() => setDialogOpen(true)} style={{ marginLeft: "auto" }}>
+            Publish
+          </TalkTButton>
+        ) : pub.published ? (
+          <span className="chip" style={{ marginLeft: "auto", gap: 6 }}>
+            <Icon name="check" size={12} /> Published
+          </span>
+        ) : null}
+      </div>
 
       <div className="flex items-center" style={{ gap: 0, marginBottom: 40, flexWrap: "wrap", border: "1px solid var(--border)" }}>
         <Meta label="Questions" value={interview.count} />
@@ -395,6 +480,16 @@ export function InterviewDetailScreen({
           </div>
         </div>
       </div>
+
+      {dialogOpen ? (
+        <PublishDialog
+          defaultName={user?.firstName ?? user?.name ?? ""}
+          busy={publishing}
+          error={publishError}
+          onConfirm={(opts) => void onConfirmPublish(opts)}
+          onClose={() => setDialogOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

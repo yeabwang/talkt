@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useClerk, useUser } from "@clerk/nextjs";
 
+import { fetchDirectory, fetchRecommended } from "@/components/talkt/api";
 import { AppShell, type TalkTRoute } from "@/components/talkt/app-shell";
 import { BuilderScreen } from "@/components/talkt/builder-screen";
 import { ATTEMPTS, CUSTOM_INTERVIEWS, TEMPLATES, type AppUser, type Interview } from "@/components/talkt/data";
@@ -78,6 +79,10 @@ export function TalkTApp() {
   const [route, setRoute] = React.useState<TalkTRoute>("dashboard");
   const [params, setParams] = React.useState<Record<string, unknown>>({});
   const [sessionInterviews, setSessionInterviews] = React.useState<Interview[]>(CUSTOM_INTERVIEWS);
+  // The live, ranked directory from the API. Falls back to mock TEMPLATES until
+  // it loads (or if the DB is unreachable in local/dev).
+  const [directory, setDirectory] = React.useState<Interview[]>(TEMPLATES);
+  const [recommended, setRecommended] = React.useState<Interview[]>([]);
   const attempts = ATTEMPTS;
 
   // Profile (name + photo) is resolved once at login and cached in
@@ -122,7 +127,34 @@ export function TalkTApp() {
     return () => cancelAnimationFrame(frame);
   }, []);
 
-  const allInterviews = React.useMemo(() => [...TEMPLATES, ...sessionInterviews], [sessionInterviews]);
+  // Load the live directory + personalized order once the user is resolved.
+  React.useEffect(() => {
+    if (!isLoaded || !clerkUser) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const dir = await fetchDirectory();
+        if (!cancelled && dir.length) setDirectory(dir);
+      } catch {
+        /* DB unreachable — keep the mock TEMPLATES fallback */
+      }
+      try {
+        const rec = await fetchRecommended();
+        if (!cancelled) setRecommended(rec);
+      } catch {
+        /* recommendations are optional */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, clerkUser]);
+
+  const allInterviews = React.useMemo(() => {
+    const ids = new Set(directory.map((interview) => interview.id));
+    const extras = sessionInterviews.filter((interview) => !ids.has(interview.id));
+    return [...directory, ...extras];
+  }, [directory, sessionInterviews]);
   const findInterview = React.useCallback((id?: string) => allInterviews.find((interview) => interview.id === id), [allInterviews]);
   const toggleTheme = () => setTheme((current) => (current === "dark" ? "light" : "dark"));
 
@@ -174,12 +206,12 @@ export function TalkTApp() {
   if (route === "dashboard") {
     body = <DashboardScreen user={user} navigate={navigate} startInterview={startInterview} attempts={attempts} allInterviews={allInterviews} />;
   } else if (route === "library") {
-    body = <LibraryScreen navigate={navigate} startInterview={startInterview} allInterviews={allInterviews} />;
+    body = <LibraryScreen navigate={navigate} startInterview={startInterview} allInterviews={allInterviews} recommended={recommended} />;
   } else if (route === "detail") {
     body = interview ? (
-      <InterviewDetailScreen interview={interview} navigate={navigate} startInterview={startInterview} />
+      <InterviewDetailScreen interview={interview} navigate={navigate} startInterview={startInterview} user={user} />
     ) : (
-      <LibraryScreen navigate={navigate} startInterview={startInterview} allInterviews={allInterviews} />
+      <LibraryScreen navigate={navigate} startInterview={startInterview} allInterviews={allInterviews} recommended={recommended} />
     );
   } else if (route === "builder") {
     body = <BuilderScreen navigate={navigate} startInterview={startInterview} user={user} />;

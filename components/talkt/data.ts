@@ -34,10 +34,24 @@ export interface Interview {
   blurb: string;
   questions: string[];
   custom?: boolean;
+  role?: string;
   language?: string;
   focus?: string[];
   // Core grading criteria the AI builder picked for a custom interview.
   dimensions?: { key: string; label: string }[];
+
+  // --- Directory / voting (populated when an interview comes from the API) ---
+  upvotes?: number;
+  downvotes?: number;
+  // The signed-in caller's current vote on this interview: 1 up, -1 down, 0 none.
+  myVote?: -1 | 0 | 1;
+  // Public attribution; null/undefined when published anonymously (shown as "Community").
+  authorName?: string | null;
+  anonymous?: boolean;
+  // True when the signed-in caller owns this interview (controls the Publish action).
+  mine?: boolean;
+  // True once the owner has published it to the public directory.
+  published?: boolean;
 }
 
 export interface Attempt {

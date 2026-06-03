@@ -2,9 +2,11 @@
 
 import * as React from "react";
 
+import { persistBuiltInterview, publishInterview, type BuiltInterviewPayload } from "@/components/talkt/api";
 import { LANGUAGES, VOICES, type AppUser, type Interview } from "@/components/talkt/data";
 import type { TalkTRoute } from "@/components/talkt/app-shell";
 import { AgentAvatar, Avatar, Icon, SectionHeader, StatusDot, TalkTButton } from "@/components/talkt/primitives";
+import { PublishDialog } from "@/components/talkt/publish-dialog";
 
 interface BuilderSummary {
   title: string;
@@ -63,6 +65,11 @@ export function BuilderScreen({
   const [turn, setTurn] = React.useState<BuilderTurn | null>(null);
   const [selected, setSelected] = React.useState<string[]>([]);
   const [language, setLanguage] = React.useState("English");
+  const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [publishing, setPublishing] = React.useState(false);
+  const [publishError, setPublishError] = React.useState<string | null>(null);
+  const [published, setPublished] = React.useState(false);
+  const persistedIdRef = React.useRef<string | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const threadRef = React.useRef<ThreadMessage[]>(thread);
   threadRef.current = thread;
@@ -154,6 +161,43 @@ export function BuilderScreen({
       focus: summary.focus,
       dimensions: turn.dimensions,
     });
+  };
+
+  const buildPayload = React.useCallback((): BuiltInterviewPayload => {
+    const qs = turn?.questions ?? [];
+    const role = summary.role || summary.title || "Custom interview";
+    return {
+      title: summary.title || `${role} (custom)`,
+      subtitle: "Built with the AI builder",
+      role: summary.role || undefined,
+      category: summary.category || "Custom",
+      difficulty: summary.difficulty || "All levels",
+      blurb: "Generated from your brief in the builder.",
+      minutes: summary.minutes || Math.max(15, qs.length * 3),
+      focus: summary.focus,
+      language,
+      voiceId: pickVoice(role),
+      questions: qs,
+      dimensions: turn?.dimensions ?? [],
+    };
+  }, [summary, language, turn]);
+
+  const onConfirmPublish = async (opts: { displayName?: string; anonymous: boolean }) => {
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      if (!persistedIdRef.current) {
+        const saved = await persistBuiltInterview(buildPayload());
+        persistedIdRef.current = saved.id;
+      }
+      await publishInterview(persistedIdRef.current, opts);
+      setPublished(true);
+      setDialogOpen(false);
+    } catch (err) {
+      setPublishError(err instanceof Error ? err.message : "Could not publish. Try again.");
+    } finally {
+      setPublishing(false);
+    }
   };
 
   const inputDisabled = sending || ready;
@@ -321,6 +365,15 @@ export function BuilderScreen({
               <TalkTButton variant="primary" size="lg" icon="phone" className="btn-block" onClick={startBuiltInterview}>
                 Start interview
               </TalkTButton>
+              {published ? (
+                <span className="chip btn-block flex items-center justify-center" style={{ gap: 6, height: 40 }}>
+                  <Icon name="check" size={13} /> Published to directory
+                </span>
+              ) : (
+                <TalkTButton variant="secondary" icon="shield" className="btn-block" onClick={() => setDialogOpen(true)}>
+                  Publish to directory
+                </TalkTButton>
+              )}
               <TalkTButton variant="ghost" className="btn-block" onClick={() => navigate("library")}>
                 Save & exit
               </TalkTButton>
@@ -328,6 +381,16 @@ export function BuilderScreen({
           </div>
         ) : null}
       </div>
+
+      {dialogOpen ? (
+        <PublishDialog
+          defaultName={user.firstName ?? user.name ?? ""}
+          busy={publishing}
+          error={publishError}
+          onConfirm={(opts) => void onConfirmPublish(opts)}
+          onClose={() => setDialogOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
