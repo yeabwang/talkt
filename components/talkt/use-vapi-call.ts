@@ -24,6 +24,37 @@ interface VapiMessage {
   transcriptType?: "partial" | "final";
 }
 
+// Pull a human-readable message out of the assorted error shapes the Web SDK
+// and underlying Daily transport throw (string | Error | {errorMsg|message|type}
+// | {error:{message}}).
+function extractErrorMessage(raw: unknown): string {
+  if (!raw) return "";
+  if (typeof raw === "string") return raw;
+  if (raw instanceof Error) return raw.message;
+  const o = raw as Record<string, unknown>;
+  const nested = o.error as Record<string, unknown> | undefined;
+  return (
+    (typeof o.errorMsg === "string" && o.errorMsg) ||
+    (typeof o.message === "string" && o.message) ||
+    (nested && typeof nested.message === "string" && nested.message) ||
+    (typeof o.type === "string" && o.type) ||
+    ""
+  );
+}
+
+// Daily/Vapi emit these as `error` events during a *normal* call teardown.
+// They mean the call ended, not that it failed — never show the error screen.
+const BENIGN_END_PATTERNS = [
+  "meeting has ended",
+  "meeting ended",
+  "signaling connection interrupted",
+  "ejected",
+];
+function isBenignEnd(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return BENIGN_END_PATTERNS.some((p) => m.includes(p));
+}
+
 // Minimal structural type for the Vapi Web SDK instance we use.
 interface VapiInstance {
   start: (assistant: unknown) => Promise<unknown>;
@@ -59,11 +90,19 @@ export function useVapiCall(): UseVapiCall {
 
   const vapiRef = React.useRef<VapiInstance | null>(null);
   const userIdleTimer = React.useRef<number | null>(null);
+  // Set once the call connects — used to distinguish a normal teardown
+  // disconnect (route to results) from a genuine connect failure (error screen).
+  const connectedRef = React.useRef(false);
 
   const cleanup = React.useCallback(() => {
     if (userIdleTimer.current) window.clearTimeout(userIdleTimer.current);
     const vapi = vapiRef.current;
     if (vapi) {
+      try {
+        vapi.stop();
+      } catch {
+        /* ignore — may not have connected yet */
+      }
       try {
         vapi.removeAllListeners();
       } catch {
@@ -99,6 +138,7 @@ export function useVapiCall(): UseVapiCall {
       setStatus("connecting");
       setError(null);
       setTurns([]);
+      connectedRef.current = false;
 
       try {
         const mod = await import("@vapi-ai/web");
@@ -106,7 +146,10 @@ export function useVapiCall(): UseVapiCall {
         const vapi = new Vapi(publicKey);
         vapiRef.current = vapi;
 
-        vapi.on("call-start", () => setStatus("active"));
+        vapi.on("call-start", () => {
+          connectedRef.current = true;
+          setStatus("active");
+        });
         vapi.on("call-start-success", (...args: unknown[]) => {
           const e = args[0] as { callId?: string } | undefined;
           if (e?.callId) setCallId(e.callId);
@@ -133,8 +176,21 @@ export function useVapiCall(): UseVapiCall {
           }
         });
         vapi.on("error", (...args: unknown[]) => {
-          const e = args[0] as { errorMsg?: string; message?: string } | undefined;
-          setError(e?.errorMsg ?? e?.message ?? "Call error");
+          const raw = args[0];
+          const msg = extractErrorMessage(raw);
+          // A benign teardown disconnect, or any error after we've connected,
+          // means the call is over — end gracefully and let the results poller
+          // take over instead of showing the connect-failed screen.
+          if (isBenignEnd(msg) || connectedRef.current) {
+            console.debug("[vapi] call ended:", msg || raw);
+            setAssistantSpeaking(false);
+            setUserSpeaking(false);
+            setStatus((s) => (s === "error" ? s : "ended"));
+            return;
+          }
+          // Pre-connect failure (bad key, invalid assistant, transport refused).
+          console.error("[vapi] call error:", raw);
+          setError(msg || "Call error");
           setStatus("error");
         });
 
