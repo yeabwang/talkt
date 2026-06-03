@@ -2,15 +2,18 @@
 
 import * as React from "react";
 
+import { persistBuiltInterview, publishInterview, type BuiltInterviewPayload } from "@/components/talkt/api";
 import { LANGUAGES, VOICES, type AppUser, type Interview } from "@/components/talkt/data";
 import type { TalkTRoute } from "@/components/talkt/app-shell";
 import { AgentAvatar, Avatar, Icon, SectionHeader, StatusDot, TalkTButton } from "@/components/talkt/primitives";
+import { PublishDialog } from "@/components/talkt/publish-dialog";
 
 interface BuilderSummary {
   title: string;
   role: string;
   category: string;
   difficulty: string;
+  blurb: string;
   focus: string[];
   minutes: number;
   count: number;
@@ -42,6 +45,7 @@ const EMPTY_SUMMARY: BuilderSummary = {
   role: "",
   category: "",
   difficulty: "",
+  blurb: "",
   focus: [],
   minutes: 0,
   count: 0,
@@ -63,6 +67,14 @@ export function BuilderScreen({
   const [turn, setTurn] = React.useState<BuilderTurn | null>(null);
   const [selected, setSelected] = React.useState<string[]>([]);
   const [language, setLanguage] = React.useState("English");
+  const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [publishing, setPublishing] = React.useState(false);
+  const [publishError, setPublishError] = React.useState<string | null>(null);
+  const [published, setPublished] = React.useState(false);
+  const [starting, setStarting] = React.useState(false);
+  // The persisted (private) DB row for this built interview, created once and
+  // shared by Start and Publish.
+  const persistedRef = React.useRef<Interview | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const threadRef = React.useRef<ThreadMessage[]>(thread);
   threadRef.current = thread;
@@ -131,29 +143,88 @@ export function BuilderScreen({
     void send(selected.join(", "));
   };
 
-  const startBuiltInterview = () => {
-    if (!turn || !ready) return;
+  const buildPayload = React.useCallback((): BuiltInterviewPayload => {
+    const qs = turn?.questions ?? [];
     const role = summary.role || summary.title || "Custom interview";
-    startInterview({
+    return {
+      title: summary.title || `${role} (custom)`,
+      subtitle: "Built with the AI builder",
+      role: summary.role || undefined,
+      category: summary.category || "Custom",
+      difficulty: summary.difficulty || "All levels",
+      blurb: summary.blurb || "Generated from your brief in the builder.",
+      minutes: summary.minutes || Math.max(15, qs.length * 3),
+      focus: summary.focus,
+      language,
+      voiceId: pickVoice(role),
+      questions: qs,
+      dimensions: turn?.dimensions ?? [],
+    };
+  }, [summary, language, turn]);
+
+  // Persist the built interview as a private DB row exactly once. Both Start and
+  // Publish funnel through here so they operate on the same row.
+  const ensurePersisted = React.useCallback(async (): Promise<Interview> => {
+    if (persistedRef.current) return persistedRef.current;
+    const saved = await persistBuiltInterview(buildPayload());
+    persistedRef.current = saved;
+    return saved;
+  }, [buildPayload]);
+
+  // Local-only interview used if persistence fails (e.g. DB unreachable), so the
+  // user can still run it without a DB row.
+  const localInterview = React.useCallback((): Interview => {
+    const qs = turn?.questions ?? [];
+    const role = summary.role || summary.title || "Custom interview";
+    return {
       id: `custom-${Date.now()}`,
       title: summary.title || `${role} (custom)`,
       subtitle: "Built with the AI builder",
       icon: "sparkles",
       category: summary.category || "Custom",
       difficulty: summary.difficulty || "All levels",
-      count: questions.length,
-      minutes: summary.minutes || Math.max(15, questions.length * 3),
+      count: qs.length,
+      minutes: summary.minutes || Math.max(15, qs.length * 3),
       author: "You",
       source: "Custom",
       takes: 0,
       voice: pickVoice(role),
       language,
       custom: true,
-      blurb: "Generated from your brief in the builder.",
-      questions,
+      blurb: summary.blurb || "Generated from your brief in the builder.",
+      questions: qs,
       focus: summary.focus,
-      dimensions: turn.dimensions,
-    });
+      dimensions: turn?.dimensions ?? [],
+    };
+  }, [summary, language, turn]);
+
+  // Start saves the interview as private (giving it a real DB row), then opens
+  // the lobby. Falls back to a local-only interview if persistence fails.
+  const startBuiltInterview = async () => {
+    if (!turn || !ready || starting) return;
+    setStarting(true);
+    try {
+      startInterview(await ensurePersisted());
+    } catch {
+      startInterview(localInterview());
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  const onConfirmPublish = async (opts: { displayName?: string; anonymous: boolean }) => {
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      const saved = await ensurePersisted();
+      await publishInterview(saved.id, opts);
+      setPublished(true);
+      setDialogOpen(false);
+    } catch (err) {
+      setPublishError(err instanceof Error ? err.message : "Could not publish. Try again.");
+    } finally {
+      setPublishing(false);
+    }
   };
 
   const inputDisabled = sending || ready;
@@ -318,9 +389,18 @@ export function BuilderScreen({
               ))}
             </ol>
             <div className="flex-col gap-2">
-              <TalkTButton variant="primary" size="lg" icon="phone" className="btn-block" onClick={startBuiltInterview}>
-                Start interview
+              <TalkTButton variant="primary" size="lg" icon="phone" className="btn-block" disabled={starting} onClick={() => void startBuiltInterview()}>
+                {starting ? "Saving..." : "Start interview"}
               </TalkTButton>
+              {published ? (
+                <span className="chip btn-block flex items-center justify-center" style={{ gap: 6, height: 40 }}>
+                  <Icon name="check" size={13} /> Published to directory
+                </span>
+              ) : (
+                <TalkTButton variant="secondary" icon="shield" className="btn-block" onClick={() => setDialogOpen(true)}>
+                  Publish to directory
+                </TalkTButton>
+              )}
               <TalkTButton variant="ghost" className="btn-block" onClick={() => navigate("library")}>
                 Save & exit
               </TalkTButton>
@@ -328,6 +408,16 @@ export function BuilderScreen({
           </div>
         ) : null}
       </div>
+
+      {dialogOpen ? (
+        <PublishDialog
+          defaultName={user.name ?? user.firstName ?? ""}
+          busy={publishing}
+          error={publishError}
+          onConfirm={(opts) => void onConfirmPublish(opts)}
+          onClose={() => setDialogOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

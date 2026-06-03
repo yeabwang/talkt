@@ -7,10 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "tsx --test tests/unit/*.test.ts",
     "ui:check": "tsx scripts/ui-prototype-check.ts",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
+    "db:seed": "tsx prisma/seed.ts",
     "db:check": "tsx scripts/db-check.ts",
     "postinstall": "prisma generate"
   },

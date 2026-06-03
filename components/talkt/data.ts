@@ -34,10 +34,24 @@ export interface Interview {
   blurb: string;
   questions: string[];
   custom?: boolean;
+  role?: string;
   language?: string;
   focus?: string[];
   // Core grading criteria the AI builder picked for a custom interview.
   dimensions?: { key: string; label: string }[];
+
+  // --- Directory / voting (populated when an interview comes from the API) ---
+  upvotes?: number;
+  downvotes?: number;
+  // The signed-in caller's current vote on this interview: 1 up, -1 down, 0 none.
+  myVote?: -1 | 0 | 1;
+  // Public attribution; null/undefined when published anonymously (shown as "Community").
+  authorName?: string | null;
+  anonymous?: boolean;
+  // True when the signed-in caller owns this interview (controls the Publish action).
+  mine?: boolean;
+  // True once the owner has published it to the public directory.
+  published?: boolean;
 }
 
 export interface Attempt {
@@ -100,223 +114,6 @@ export const DIMENSIONS: Dimension[] = [
   { id: "confidence", label: "Confidence", blurb: "Pace, conviction, recovery" },
 ];
 
-export const TEMPLATES: Interview[] = [
-  {
-    id: "fe-react",
-    title: "Frontend engineer",
-    subtitle: "React · TypeScript · systems",
-    icon: "code",
-    category: "Engineering",
-    difficulty: "Mid-Senior",
-    count: 8,
-    minutes: 25,
-    author: "TalkT",
-    source: "Curated",
-    takes: 4120,
-    voice: "kai",
-    blurb: "Component design, state, performance, and a small system-design prompt.",
-    questions: [
-      "Walk me through how you'd structure a large React app for a team of ten.",
-      "When would you reach for a global store over local state, and what are the costs?",
-      "A list of 10,000 rows is janky on scroll. How do you diagnose and fix it?",
-      "Explain the tradeoffs between server components and client components.",
-      "How do you keep a design system's components accessible by default?",
-      "Describe a bug you fixed that taught you something about the platform.",
-      "Design the data flow for a collaborative cursor feature.",
-      "What's your approach to testing a complex form?",
-    ],
-  },
-  {
-    id: "pm-sense",
-    title: "Product manager",
-    subtitle: "Product sense · prioritization",
-    icon: "target",
-    category: "Product",
-    difficulty: "All levels",
-    count: 7,
-    minutes: 22,
-    author: "TalkT",
-    source: "Curated",
-    takes: 3380,
-    voice: "ren",
-    blurb: "Product judgment, metrics, and stakeholder tradeoffs - no whiteboard needed.",
-    questions: [
-      "Pick a product you use daily. What would you change first, and why?",
-      "How would you measure success for a feature that has no obvious metric?",
-      "Two teams want the same engineer. How do you decide?",
-      "Walk me through how you'd size a new market opportunity.",
-      "A launch is flat after two weeks. What do you look at?",
-      "How do you say no to a senior stakeholder's pet feature?",
-      "Describe a decision you made with incomplete data.",
-    ],
-  },
-  {
-    id: "behavioral",
-    title: "Behavioral & leadership",
-    subtitle: "STAR · ownership · conflict",
-    icon: "message-square",
-    category: "General",
-    difficulty: "All levels",
-    count: 6,
-    minutes: 18,
-    author: "TalkT",
-    source: "Curated",
-    takes: 6210,
-    voice: "adi",
-    blurb: "The questions every interview asks, rehearsed until they're sharp.",
-    questions: [
-      "Tell me about a time you disagreed with a manager.",
-      "Describe a project that failed. What did you own?",
-      "When did you have to influence without authority?",
-      "Tell me about a time you received hard feedback.",
-      "How do you handle a teammate who isn't pulling their weight?",
-      "What's a risk you took that didn't pay off?",
-    ],
-  },
-  {
-    id: "nurse",
-    title: "Registered nurse",
-    subtitle: "Clinical scenarios · patient care",
-    icon: "activity",
-    category: "Healthcare",
-    difficulty: "Entry-Mid",
-    count: 7,
-    minutes: 20,
-    author: "M. Okafor",
-    source: "Community",
-    takes: 980,
-    voice: "mira",
-    blurb: "Triage judgment, communication under pressure, and ethics scenarios.",
-    questions: [
-      "A patient refuses a medication you believe they need. What do you do?",
-      "Describe how you prioritize four patients at the start of a shift.",
-      "How do you de-escalate an angry family member?",
-      "Tell me about a time you caught a mistake before it reached a patient.",
-      "Walk me through your handoff at end of shift.",
-      "How do you stay composed during a code?",
-      "What would you do if you saw a colleague cut a corner on hygiene?",
-    ],
-  },
-  {
-    id: "consult",
-    title: "Consulting case",
-    subtitle: "Market entry · profitability",
-    icon: "trending-up",
-    category: "Business",
-    difficulty: "Senior",
-    count: 5,
-    minutes: 28,
-    author: "TalkT",
-    source: "Curated",
-    takes: 1740,
-    voice: "kai",
-    blurb: "A spoken case with structure, math out loud, and a recommendation.",
-    questions: [
-      "A coffee chain's profits are down 15%. Where do you start?",
-      "Should a regional grocer launch a private-label line?",
-      "Estimate the number of electric scooters needed for a mid-size city.",
-      "A client wants to enter the meal-kit market. Walk me through your approach.",
-      "Synthesize: what's your recommendation and the top risk?",
-    ],
-  },
-  {
-    id: "sales",
-    title: "Account executive",
-    subtitle: "Discovery · objection handling",
-    icon: "headphones",
-    category: "Sales",
-    difficulty: "Mid",
-    count: 6,
-    minutes: 18,
-    author: "D. Reyes",
-    source: "Community",
-    takes: 1290,
-    voice: "ren",
-    blurb: "Role-play discovery calls and handle the objections you fear most.",
-    questions: [
-      "Sell me on a tool I just said I don't have budget for.",
-      "Walk me through your discovery process on a cold first call.",
-      "A champion goes quiet for three weeks. What's your play?",
-      "How do you handle 'we're already using a competitor'?",
-      "Tell me about the largest deal you closed and what almost killed it.",
-      "How do you forecast a quarter you're behind on?",
-    ],
-  },
-  {
-    id: "ux",
-    title: "Product designer",
-    subtitle: "Portfolio · critique · craft",
-    icon: "palette",
-    category: "Design",
-    difficulty: "Mid-Senior",
-    count: 6,
-    minutes: 22,
-    author: "TalkT",
-    source: "Curated",
-    takes: 2050,
-    voice: "adi",
-    blurb: "Talk through your process, defend a decision, and critique a flow live.",
-    questions: [
-      "Walk me through one project end to end - your role, not the team's.",
-      "Describe a design decision you'd make differently now.",
-      "How do you handle a stakeholder who 'just doesn't like it'?",
-      "Critique the onboarding of an app you used recently.",
-      "How do you know when a design is done?",
-      "How do you balance consistency with the right exception?",
-    ],
-  },
-  {
-    id: "ds",
-    title: "Data scientist",
-    subtitle: "Stats · ML · experiment design",
-    icon: "bar-chart",
-    category: "Engineering",
-    difficulty: "Mid-Senior",
-    count: 7,
-    minutes: 26,
-    author: "TalkT",
-    source: "Curated",
-    takes: 1610,
-    voice: "mira",
-    blurb: "Reason out loud about experiments, models, and messy real-world data.",
-    questions: [
-      "Explain p-values to a skeptical executive.",
-      "Your model's offline metric is great but online it's flat. Why?",
-      "How would you design an A/B test for a low-traffic feature?",
-      "When is a simpler model the right call over a more accurate one?",
-      "Walk me through handling severe class imbalance.",
-      "How do you detect and explain data leakage?",
-      "A stakeholder wants a number you can't get cleanly. What do you do?",
-    ],
-  },
-];
-
-export const CUSTOM_INTERVIEWS: Interview[] = [
-  {
-    id: "custom-eng-mgr",
-    title: "Engineering manager (custom)",
-    subtitle: "Built with the AI builder",
-    icon: "sparkles",
-    category: "Custom",
-    difficulty: "Senior",
-    count: 6,
-    minutes: 24,
-    author: "You",
-    source: "Custom",
-    takes: 2,
-    voice: "ren",
-    custom: true,
-    blurb: "Generated from your brief: first-time EM, 30-person org, growth focus.",
-    questions: [
-      "How do you run a one-on-one with an underperforming senior engineer?",
-      "Walk me through your first 90 days managing a team you didn't build.",
-      "How do you balance shipping with paying down technical debt?",
-      "Describe how you'd grow a strong IC who doesn't want to manage.",
-      "A project is two months late. How do you communicate up?",
-      "How do you set goals for a team in an ambiguous quarter?",
-    ],
-  },
-];
 
 export interface UsageBreakdownRow {
   interviewId: string;

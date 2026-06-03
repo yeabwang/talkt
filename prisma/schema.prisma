@@ -37,6 +37,7 @@ model User {
 
   interviews Interview[] // custom interviews this user owns
   attempts   Attempt[]
+  votes      Vote[]
 }
 
 model Interview {
@@ -44,21 +45,58 @@ model Interview {
   ownerId     String? // null = system template
   owner       User?         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   title       String
+  subtitle    String? // short tagline under the title
   role        String?
-  topic       String?
+  topic       String? // used as the directory "category" facet
   difficulty  String?
+  blurb       String? // one-line description shown on the card/detail
+  minutes     Int? // estimated spoken duration
+  focus       String[]      @default([]) // themes the interview leans on
   type        InterviewType @default(custom)
   visibility  Visibility    @default(private)
   language    String        @default("en") // ISO 639-1; controls question gen, interviewer voice, report
   dimensions  Json          @default("[]") // 4 core scoring dims LLM picks per role: [{ key, label, weight? }]
   questions   Json // ordered Question[]: { id, text, idealAnswerHint? }
   voiceConfig Json? // { voiceId } — language promoted to its own column
-  createdAt   DateTime      @default(now())
+
+  // Publishing + attribution (a custom interview becomes a public template).
+  publishedAt DateTime? // when the owner published it public; null = never published
+  authorName  String? // snapshot display-name credit shown on card/detail; null when anonymous
+  anonymous   Boolean   @default(false) // published without attribution (carries a ranking down-weight)
+
+  // Reddit-style voting tallies (denormalized for transparent counts + sorted reads).
+  upvotes   Int   @default(0)
+  downvotes Int   @default(0)
+  rankScore Float @default(0) // Wilson lower bound with anonymity down-weight baked in
+
+  // Auto-takedown: heavily downvoted templates are hidden and flagged for admin review.
+  flagged   Boolean   @default(false)
+  flaggedAt DateTime?
+
+  createdAt DateTime @default(now())
 
   attempts Attempt[]
+  votes    Vote[]
 
   @@index([ownerId])
   @@index([type, visibility])
+  // Directory reads: filter out flagged/private, order by rankScore.
+  @@index([flagged, visibility, type, rankScore])
+}
+
+// One up/down vote per user per interview. Reddit-style; toggleable/clearable.
+model Vote {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interviewId String
+  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  value       Int // 1 = up, -1 = down
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, interviewId]) // enforces one vote per user per interview
+  @@index([interviewId])
 }
 
 model Attempt {
