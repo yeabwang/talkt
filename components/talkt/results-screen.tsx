@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { fetchAttemptStatus } from "@/components/talkt/api";
 import { DIMENSIONS, buildFeedback, type Attempt, type Feedback, type FeedbackEvidence, type Interview, type QuestionFeedback } from "@/components/talkt/data";
 import type { TalkTRoute } from "@/components/talkt/app-shell";
 import { Icon, ScoreBar, ScoreRing, SectionHeader, TalkTButton, scoreColorVar } from "@/components/talkt/primitives";
@@ -24,6 +25,110 @@ function scoreAward(score: number): { label: string; color: string } {
 export function ResultsScreen({
   interview,
   attempt,
+  attemptId,
+  navigate,
+  startInterview,
+  instant,
+}: {
+  interview: Interview;
+  attempt?: Attempt | null;
+  // Real DB attempt id for a just-finished call; when set, feedback is polled.
+  attemptId?: string;
+  navigate: (route: TalkTRoute, params?: Record<string, unknown>) => void;
+  startInterview: (interview: Interview) => void;
+  instant?: boolean;
+}) {
+  // History / preview path: synchronous mock feedback (DB-backed history isn't
+  // wired yet). Live path (attemptId set): poll until analysis is ready.
+  if (attemptId && !instant) {
+    return <LiveResults interview={interview} attemptId={attemptId} navigate={navigate} startInterview={startInterview} />;
+  }
+  return <MockResults interview={interview} attempt={attempt} navigate={navigate} startInterview={startInterview} instant={instant} />;
+}
+
+/** Polls the attempt status endpoint until analysis is ready, then renders feedback. */
+function LiveResults({
+  interview,
+  attemptId,
+  navigate,
+  startInterview,
+}: {
+  interview: Interview;
+  attemptId: string;
+  navigate: (route: TalkTRoute, params?: Record<string, unknown>) => void;
+  startInterview: (interview: Interview) => void;
+}) {
+  const [feedback, setFeedback] = React.useState<Feedback | null>(null);
+  const [failed, setFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    let active = true;
+    let timer: number | undefined;
+
+    const poll = async () => {
+      try {
+        const status = await fetchAttemptStatus(attemptId);
+        if (!active) return;
+        if (status.status === "ready") {
+          setFeedback({
+            overall: status.overall ?? 0,
+            summary: status.summary ?? "",
+            dimensions: (status.dimensions ?? []).map((d) => ({ id: d.id, score: d.score, note: d.note })),
+            strengths: status.strengths ?? [],
+            improvements: status.improvements ?? [],
+            perQuestion: status.perQuestion ?? [],
+          });
+          return;
+        }
+        if (status.status === "failed") {
+          setFailed(true);
+          return;
+        }
+      } catch {
+        /* transient — keep polling */
+      }
+      timer = window.setTimeout(poll, 3000);
+    };
+    void poll();
+
+    return () => {
+      active = false;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [attemptId]);
+
+  if (failed) {
+    return (
+      <div className="bg-grid relative" style={{ minHeight: "calc(100vh - var(--header-h))", display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
+        <div className="relative text-center" style={{ maxWidth: 420 }}>
+          <Icon name="trending-up" size={26} className="muted" />
+          <h2 className="h2" style={{ margin: "16px 0 8px" }}>
+            We couldn&apos;t score this attempt
+          </h2>
+          <p className="caption" style={{ marginBottom: 22 }}>
+            The call was too short to analyze, or analysis failed. Try the interview again.
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <TalkTButton variant="secondary" icon="arrow-left" onClick={() => navigate("dashboard")}>
+              Back to dashboard
+            </TalkTButton>
+            <TalkTButton variant="primary" icon="repeat" onClick={() => startInterview(interview)}>
+              Retake
+            </TalkTButton>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!feedback) return <Analyzing />;
+  return <FeedbackReady interview={interview} attempt={null} feedback={feedback} navigate={navigate} startInterview={startInterview} />;
+}
+
+/** Mock/preview feedback (history opens, instant preview). */
+function MockResults({
+  interview,
+  attempt,
   navigate,
   startInterview,
   instant,
@@ -44,11 +149,13 @@ export function ResultsScreen({
   return <FeedbackReady interview={interview} attempt={attempt} feedback={feedback} navigate={navigate} startInterview={startInterview} />;
 }
 
-function Analyzing({ onReady }: { onReady: () => void }) {
+function Analyzing({ onReady }: { onReady?: () => void }) {
   const [done, setDone] = React.useState(0);
 
   React.useEffect(() => {
     if (done >= ANALYSIS_STEPS.length) {
+      // Live path (no onReady): hold on the last step until feedback arrives.
+      if (!onReady) return;
       const timer = window.setTimeout(onReady, 650);
       return () => window.clearTimeout(timer);
     }
@@ -159,13 +266,15 @@ function FeedbackReady({
       <div className="talkt-results-dimensions" style={{ background: "var(--border)", border: "1px solid var(--border)", marginBottom: 40 }}>
         {feedback.dimensions.map((dimension) => {
           const meta = DIMENSIONS.find((item) => item.id === dimension.id);
+          const custom = interview.dimensions?.find((d) => d.key === dimension.id);
+          const label = meta?.label ?? custom?.label ?? dimension.id;
           return (
             <div key={dimension.id} style={{ background: "var(--card)", padding: 22 }}>
               <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
                 <div>
-                  <div className="h3">{meta?.label ?? dimension.id}</div>
+                  <div className="h3">{label}</div>
                   <div className="caption" style={{ fontSize: 12 }}>
-                    {meta?.blurb ?? ""}
+                    {meta?.blurb ?? dimension.note ?? ""}
                   </div>
                 </div>
                 <span className="stat-value" style={{ fontSize: 30, color: scoreColorVar(dimension.score) }}>

@@ -117,6 +117,23 @@ model Attempt {
   @@index([interviewId])
 }
 
+// Cached pool of usable voice agents. The lobby/start path resolves a persona
+// (key) to a live provider voice id; availability is re-checked against Vapi and
+// a dead voice id is swapped for a working one, then this row is updated so the
+// next user gets the fresh value without another provider round-trip.
+model VoiceAgent {
+  key         String   @id // stable persona key surfaced in the UI: adi/ren/kai/mira
+  name        String
+  tone        String
+  provider    String   @default("11labs") // Vapi voice provider
+  voiceId     String // provider voice id used to build the transient assistant
+  language    String   @default("en") // ISO 639-1 the voice is tuned for
+  available   Boolean  @default(true) // last known availability against the provider
+  lastChecked DateTime? // when availability was last verified (TTL-gated)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 model Feedback {
   id              String   @id @default(cuid())
   attemptId       String   @unique

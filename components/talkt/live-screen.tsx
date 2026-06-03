@@ -2,98 +2,95 @@
 
 import * as React from "react";
 
-import { VOICES, interviewLanguage, type AppUser, type Interview } from "@/components/talkt/data";
+import { attachCallId, type CallSession } from "@/components/talkt/api";
+import { interviewLanguage, type AppUser, type Interview } from "@/components/talkt/data";
+import { useVapiCall } from "@/components/talkt/use-vapi-call";
 import { AgentAvatar, Avatar, Icon, Waveform, Wordmark } from "@/components/talkt/primitives";
-
-const ANSWER_WINDOW = 7600;
-const CLOSING_TEXT = "That's everything I had. Thanks for talking it through - generating your feedback now.";
 
 export function LiveInterviewScreen({
   interview,
   user,
+  session,
+  camStream,
   onEnd,
   onCancel,
 }: {
   interview: Interview;
   user: AppUser;
-  onEnd: () => void;
+  session: CallSession;
+  camStream: MediaStream | null;
+  onEnd: (attemptId: string) => void;
   onCancel: () => void;
 }) {
-  const questions = interview.questions;
-  const total = questions.length;
-  const voice = VOICES.find((item) => item.id === interview.voice) ?? VOICES[0];
-
-  const [idx, setIdx] = React.useState(0);
-  const [mode, setMode] = React.useState<"asking" | "answering" | "closing">("asking");
-  const [typed, setTyped] = React.useState("");
+  const call = useVapiCall();
   const [elapsed, setElapsed] = React.useState(0);
-  const [micOn, setMicOn] = React.useState(true);
-  const [captionsOn, setCaptionsOn] = React.useState(true);
   const [showTranscript, setShowTranscript] = React.useState(false);
+  const [captionsOn, setCaptionsOn] = React.useState(true);
+  const videoRef = React.useRef<HTMLVideoElement | null>(null);
+  const startedRef = React.useRef(false);
 
-  const fullQuestion = mode === "closing" ? CLOSING_TEXT : questions[idx];
-  const beginQuestion = React.useCallback(
-    (nextIdx: number) => {
-      setIdx(nextIdx);
-      setMode(nextIdx >= total ? "closing" : "asking");
-      setTyped("");
-    },
-    [total]
-  );
+  const estTotal = Math.max(60, (interview.minutes || 15) * 60);
 
+  // Kick off the call once (StrictMode double-invoke guard).
   React.useEffect(() => {
-    const timer = window.setInterval(() => setElapsed((value) => value + 1), 1000);
+    if (startedRef.current) return;
+    startedRef.current = true;
+    void call.start(session.publicKey, session.assistant);
+  }, [call, session]);
+
+  // Persist the Vapi call id as a defensive webhook join key.
+  React.useEffect(() => {
+    if (call.callId) void attachCallId(session.attemptId, call.callId);
+  }, [call.callId, session.attemptId]);
+
+  // Attach + tear down the local self-view stream owned by this screen.
+  React.useEffect(() => {
+    if (camStream && videoRef.current) videoRef.current.srcObject = camStream;
+    return () => {
+      if (camStream) camStream.getTracks().forEach((t) => t.stop());
+    };
+  }, [camStream]);
+
+  // Elapsed clock runs while the call is active.
+  React.useEffect(() => {
+    if (call.status !== "active") return;
+    const timer = window.setInterval(() => setElapsed((v) => v + 1), 1000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [call.status]);
 
+  // Natural or user-initiated end -> hand the attempt to the results poller.
   React.useEffect(() => {
-    if (mode !== "asking" && mode !== "closing") return;
-    const closing = mode === "closing";
-    const text = closing ? CLOSING_TEXT : questions[idx];
-    let index = 0;
-    const timer = window.setInterval(() => {
-      index += 1;
-      setTyped(text.slice(0, index));
-      if (index >= text.length) {
-        window.clearInterval(timer);
-        if (closing) {
-          window.setTimeout(() => onEnd(), 1600);
-        } else {
-          window.setTimeout(() => setMode("answering"), 550);
-        }
-      }
-    }, 26);
-    return () => window.clearInterval(timer);
-  }, [idx, mode, onEnd, questions]);
+    if (call.status === "ended") onEnd(session.attemptId);
+  }, [call.status, onEnd, session.attemptId]);
 
-  React.useEffect(() => {
-    if (mode !== "answering") return;
-    const advance = window.setTimeout(() => beginQuestion(idx + 1), ANSWER_WINDOW);
-    return () => window.clearTimeout(advance);
-  }, [beginQuestion, mode, idx]);
+  const aiSpeaking = call.assistantSpeaking;
+  const youSpeaking = call.userSpeaking && !call.muted;
 
-  const skip = () => {
-    if (mode === "answering") beginQuestion(idx + 1);
-  };
+  const lastAssistant = React.useMemo(() => {
+    for (let i = call.turns.length - 1; i >= 0; i -= 1) if (call.turns[i].role === "assistant") return call.turns[i].text;
+    return "";
+  }, [call.turns]);
 
-  const aiSpeaking = mode === "asking" || mode === "closing";
-  const youSpeaking = mode === "answering" && micOn;
+  const endCall = () => call.stop();
 
-  // Running conversation transcript shown in the right panel.
-  const transcript = React.useMemo(() => {
-    const turns: { who: string; role: "interviewer" | "you"; text: string }[] = [];
-    const answered = Math.min(idx, total);
-    for (let i = 0; i < answered; i += 1) {
-      turns.push({ who: voice.name, role: "interviewer", text: questions[i] });
-      turns.push({ who: user.name, role: "you", text: "[Spoken answer captured]" });
-    }
-    if (idx < total) {
-      turns.push({ who: voice.name, role: "interviewer", text: questions[idx] });
-      if (mode === "answering") turns.push({ who: user.name, role: "you", text: "Listening to your answer…" });
-    }
-    if (mode === "closing") turns.push({ who: voice.name, role: "interviewer", text: CLOSING_TEXT });
-    return turns;
-  }, [idx, total, mode, questions, voice.name, user.name]);
+  if (call.status === "error") {
+    return (
+      <div style={{ minHeight: "100vh", background: "var(--background)", display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
+        <div className="text-center" style={{ maxWidth: 420 }}>
+          <Icon name="mic-off" size={28} style={{ color: "var(--error)" }} />
+          <h2 className="h2" style={{ margin: "16px 0 8px" }}>
+            Couldn&apos;t connect the call
+          </h2>
+          <p className="caption" style={{ marginBottom: 22 }}>
+            {call.error ?? "The voice service is unavailable. Please try again."}
+          </p>
+          <button className="btn btn-secondary" type="button" onClick={onCancel}>
+            Back to dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--background)", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}>
@@ -121,7 +118,7 @@ export function LiveInterviewScreen({
       </div>
 
       <div style={{ height: 2, background: "var(--border)" }}>
-        <div style={{ height: "100%", width: `${(Math.min(idx, total) / total) * 100}%`, background: "var(--foreground)", transition: "width var(--dur-base) var(--ease-out)" }} />
+        <div style={{ height: "100%", width: `${Math.min(100, (elapsed / estTotal) * 100)}%`, background: "var(--foreground)", transition: "width var(--dur-base) var(--ease-out)" }} />
       </div>
 
       <div className="grow flex" style={{ minHeight: 0 }}>
@@ -130,30 +127,30 @@ export function LiveInterviewScreen({
             <Tile
               active={aiSpeaking}
               speaking={aiSpeaking}
-              name={voice.name}
-              sub="Interviewer"
-              status={mode === "closing" ? "Wrapping up" : aiSpeaking ? "Speaking" : "Listening"}
+              name="Interviewer"
+              sub="TalkT"
+              status={call.status === "connecting" ? "Connecting" : aiSpeaking ? "Speaking" : "Listening"}
               avatar={<AgentAvatar size={96} active={aiSpeaking} />}
             />
             <Tile
               active={youSpeaking}
               speaking={youSpeaking}
-              muted={!micOn}
+              muted={call.muted}
               name={user.name}
               sub="You"
-              status={!micOn ? "Muted" : youSpeaking ? "Speaking" : "Ready"}
-              avatar={<Avatar name={user.name} size={96} />}
+              status={call.muted ? "Muted" : youSpeaking ? "Speaking" : "Ready"}
+              avatar={camStream ? <SelfView videoRef={videoRef} /> : <Avatar name={user.name} size={96} />}
             />
           </div>
 
           {captionsOn ? (
             <div className="text-center" style={{ maxWidth: 760, width: "100%" }}>
               <div className="flex items-center justify-center gap-3" style={{ marginBottom: 16 }}>
-                <span className="mono-label">{mode === "closing" ? "Closing" : `Question ${idx + 1} of ${total}`}</span>
+                <span className="mono-label">{aiSpeaking ? "Interviewer" : youSpeaking ? "You" : "Live"}</span>
               </div>
               <p style={{ fontSize: "clamp(16px, 1.9vw, 20px)", fontWeight: 500, letterSpacing: "-0.01em", lineHeight: 1.4, minHeight: 40, margin: 0 }}>
-                {typed}
-                {aiSpeaking && typed.length < fullQuestion.length ? <span className="cursor-blink" /> : null}
+                {lastAssistant || (call.status === "connecting" ? "Connecting…" : "Listening…")}
+                {aiSpeaking ? <span className="cursor-blink" /> : null}
               </p>
             </div>
           ) : null}
@@ -167,12 +164,12 @@ export function LiveInterviewScreen({
                 <Icon name="x" size={15} />
               </button>
             </div>
-            {transcript.length ? (
+            {call.turns.length ? (
               <div className="flex-col" style={{ display: "flex", gap: 16 }}>
-                {transcript.map((turn, index) => (
+                {call.turns.map((turn, index) => (
                   <div key={index}>
-                    <div className="mono" style={{ fontSize: 11, color: turn.role === "interviewer" ? "var(--muted-foreground)" : "var(--dimmed)" }}>
-                      {turn.who}
+                    <div className="mono" style={{ fontSize: 11, color: turn.role === "assistant" ? "var(--muted-foreground)" : "var(--dimmed)" }}>
+                      {turn.role === "assistant" ? "Interviewer" : user.name}
                     </div>
                     <p className="caption" style={{ margin: "3px 0 0", color: "var(--foreground)" }}>
                       {turn.text}
@@ -196,31 +193,37 @@ export function LiveInterviewScreen({
           </span>
         </div>
 
-        <CtrlBtn icon={micOn ? "mic" : "mic-off"} on={micOn} danger={!micOn} onClick={() => setMicOn((value) => !value)} label="Toggle mic" />
+        <CtrlBtn icon={call.muted ? "mic-off" : "mic"} on={!call.muted} danger={call.muted} onClick={call.toggleMute} label="Toggle mic" />
         <CtrlBtn icon="captions" on={captionsOn} onClick={() => setCaptionsOn((value) => !value)} label={captionsOn ? "Hide captions" : "Show captions"} />
-        <button className="btn btn-danger" type="button" onClick={onCancel} style={{ width: 58, height: 48, padding: 0 }} aria-label="End call">
+        <button className="btn btn-danger" type="button" onClick={endCall} style={{ width: 58, height: 48, padding: 0 }} aria-label="End call">
           <Icon name="phone" size={20} style={{ transform: "rotate(135deg)" }} />
         </button>
 
         <div className="flex items-center gap-3" style={{ position: "absolute", right: 26 }}>
-          {mode === "answering" ? (
-            <button type="button" onClick={skip} className="flex items-center gap-2 mono btn-ghost" style={{ height: 34, padding: "0 10px", fontSize: 11, cursor: "pointer", border: 0, background: "transparent", color: "var(--foreground)" }}>
-              Skip ahead <Icon name="chevron-right" size={14} />
-            </button>
-          ) : null}
-          {mode === "asking" ? (
+          {call.status === "connecting" ? (
+            <span className="flex items-center gap-2 mono" style={{ fontSize: 11, color: "var(--muted-foreground)" }}>
+              <Icon name="loader" size={14} className="spin" /> Connecting
+            </span>
+          ) : aiSpeaking ? (
             <span className="mono" style={{ fontSize: 11, color: "var(--muted-foreground)" }}>
               Interviewer is speaking...
-            </span>
-          ) : null}
-          {mode === "closing" ? (
-            <span className="flex items-center gap-2 mono" style={{ fontSize: 11, color: "var(--muted-foreground)" }}>
-              <Icon name="loader" size={14} className="spin" /> Ending call
             </span>
           ) : null}
         </div>
       </div>
     </div>
+  );
+}
+
+function SelfView({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement | null> }) {
+  return (
+    <video
+      ref={videoRef}
+      autoPlay
+      muted
+      playsInline
+      style={{ width: 96, height: 96, borderRadius: "50%", objectFit: "cover", transform: "scaleX(-1)" }}
+    />
   );
 }
 

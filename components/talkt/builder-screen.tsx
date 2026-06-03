@@ -77,12 +77,15 @@ export function BuilderScreen({
   const persistedRef = React.useRef<Interview | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const threadRef = React.useRef<ThreadMessage[]>(thread);
-  threadRef.current = thread;
   const openedRef = React.useRef(false);
 
   const summary = turn?.summary ?? EMPTY_SUMMARY;
   const ready = Boolean(turn?.ready);
   const questions = turn?.questions ?? [];
+
+  React.useEffect(() => {
+    threadRef.current = thread;
+  }, [thread]);
 
   React.useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;

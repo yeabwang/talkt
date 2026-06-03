@@ -9,6 +9,7 @@ async function main() {
     users: await prisma.user.count(),
     interviews: await prisma.interview.count(),
     attempts: await prisma.attempt.count(),
+    voiceAgents: await prisma.voiceAgent.count(),
     feedback: await prisma.feedback.count(),
   };
   console.log("DB OK:", JSON.stringify(counts));
