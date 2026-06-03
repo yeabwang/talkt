@@ -17,6 +17,60 @@ import { UsageScreen } from "@/components/talkt/usage-screen";
 
 type Theme = "dark" | "light";
 
+const USER_CACHE_KEY = "talkt-user";
+
+// Minimal shape we read off the Clerk user resource.
+interface ClerkUserLike {
+  id: string;
+  fullName: string | null;
+  firstName: string | null;
+  username: string | null;
+  hasImage: boolean;
+  imageUrl: string;
+  primaryEmailAddress?: { emailAddress: string } | null;
+}
+
+function deriveUser(clerkUser: ClerkUserLike): AppUser {
+  const email = clerkUser.primaryEmailAddress?.emailAddress ?? "";
+  return {
+    name: clerkUser.fullName ?? clerkUser.firstName ?? clerkUser.username ?? (email || "TalkT user"),
+    email,
+    firstName: clerkUser.firstName ?? undefined,
+    image: clerkUser.hasImage ? clerkUser.imageUrl : undefined,
+  };
+}
+
+function readCachedUser(): { id: string; user: AppUser } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(USER_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { id?: string; user?: AppUser };
+    if (!parsed.id || !parsed.user) return null;
+    return { id: parsed.id, user: parsed.user };
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedUser(id: string, user: AppUser) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify({ id, user }));
+  } catch {
+    /* sessionStorage unavailable (private mode / quota) — degrade silently */
+  }
+}
+
+function clearCachedUser() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(USER_CACHE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function TalkTApp() {
   const { isLoaded, user: clerkUser } = useUser();
   const { signOut: clerkSignOut } = useClerk();
@@ -26,14 +80,27 @@ export function TalkTApp() {
   const [sessionInterviews, setSessionInterviews] = React.useState<Interview[]>(CUSTOM_INTERVIEWS);
   const attempts = ATTEMPTS;
 
-  const user = React.useMemo<AppUser | null>(() => {
-    if (!clerkUser) return null;
-    const email = clerkUser.primaryEmailAddress?.emailAddress ?? "";
-    return {
-      name: clerkUser.fullName ?? clerkUser.username ?? (email || "TalkT user"),
-      email,
-    };
-  }, [clerkUser]);
+  // Profile (name + photo) is resolved once at login and cached in
+  // sessionStorage; every screen reads the cached copy instead of re-deriving
+  // from Clerk on each render/navigation.
+  const [user, setUser] = React.useState<AppUser | null>(() => readCachedUser()?.user ?? null);
+
+  React.useEffect(() => {
+    if (!isLoaded) return;
+    if (!clerkUser) {
+      clearCachedUser();
+      setUser(null);
+      return;
+    }
+    const cached = readCachedUser();
+    if (cached && cached.id === clerkUser.id) {
+      if (!user) setUser(cached.user);
+      return; // already cached this session — don't re-derive
+    }
+    const derived = deriveUser(clerkUser);
+    writeCachedUser(clerkUser.id, derived);
+    setUser(derived);
+  }, [isLoaded, clerkUser, user]);
 
   React.useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -77,9 +144,9 @@ export function TalkTApp() {
     setRoute("lobby");
   };
 
-  // "/" is protected by proxy.ts, so a reaching user is authenticated; this
-  // only guards the brief pre-hydration window before Clerk resolves.
-  if (!isLoaded || !user) return null;
+  // "/" is protected by proxy.ts, so a reaching user is authenticated. A cached
+  // profile lets us paint immediately; otherwise wait for Clerk to resolve.
+  if (!user) return null;
 
   const paramInterview = params.interview as Interview | undefined;
   const paramInterviewId = params.interviewId as string | undefined;
@@ -115,7 +182,7 @@ export function TalkTApp() {
       <LibraryScreen navigate={navigate} startInterview={startInterview} allInterviews={allInterviews} />
     );
   } else if (route === "builder") {
-    body = <BuilderScreen navigate={navigate} startInterview={startInterview} />;
+    body = <BuilderScreen navigate={navigate} startInterview={startInterview} user={user} />;
   } else if (route === "reports") {
     body = <ReportsScreen navigate={navigate} startInterview={startInterview} attempts={attempts} allInterviews={allInterviews} />;
   } else if (route === "usage") {

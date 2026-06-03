@@ -219,7 +219,7 @@ function ProfileMenu({
           color: "inherit",
         }}
       >
-        <Avatar name={user.name} size={28} />
+        <Avatar name={user.name} src={user.image} size={28} />
         <Icon name="chevron-down" size={15} className="muted" />
       </button>
 

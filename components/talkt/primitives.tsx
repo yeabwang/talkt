@@ -210,7 +210,27 @@ export function TalkTButton({
   );
 }
 
-export function Avatar({ name = "You", size = 40 }: { name?: string; size?: number }) {
+export function Avatar({ name = "You", size = 40, src }: { name?: string; size?: number; src?: string }) {
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={name}
+        width={size}
+        height={size}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: "var(--radius-full)",
+          objectFit: "cover",
+          border: "1px solid var(--border)",
+          flexShrink: 0,
+        }}
+      />
+    );
+  }
+
   const initials = name
     .split(" ")
     .map((word) => word[0])

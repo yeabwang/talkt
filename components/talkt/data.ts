@@ -7,6 +7,9 @@ export interface Voice {
 export interface AppUser {
   name: string;
   email: string;
+  firstName?: string;
+  // Clerk profile image URL (img.clerk.com); falls back to initials if absent.
+  image?: string;
 }
 
 export interface Dimension {
@@ -32,6 +35,9 @@ export interface Interview {
   questions: string[];
   custom?: boolean;
   language?: string;
+  focus?: string[];
+  // Core grading criteria the AI builder picked for a custom interview.
+  dimensions?: { key: string; label: string }[];
 }
 
 export interface Attempt {

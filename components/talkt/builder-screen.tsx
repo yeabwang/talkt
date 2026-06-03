@@ -2,163 +2,161 @@
 
 import * as React from "react";
 
-import { LANGUAGES, VOICES, type Interview } from "@/components/talkt/data";
+import { LANGUAGES, VOICES, type AppUser, type Interview } from "@/components/talkt/data";
 import type { TalkTRoute } from "@/components/talkt/app-shell";
-import { AgentAvatar, Icon, SectionHeader, StatusDot, TalkTButton } from "@/components/talkt/primitives";
+import { AgentAvatar, Avatar, Icon, SectionHeader, StatusDot, TalkTButton } from "@/components/talkt/primitives";
 
-interface BuilderDraft {
+interface BuilderSummary {
+  title: string;
   role: string;
+  category: string;
   difficulty: string;
   focus: string[];
-  count: number;
   minutes: number;
-  voice: string;
-  language: string;
-  questions: string[] | null;
+  count: number;
+}
+
+interface BuilderDimension {
+  key: string;
+  label: string;
+}
+
+interface BuilderTurn {
+  response_text: string;
+  suggestions_enabled: boolean;
+  suggestion_type: "single" | "multi" | null;
+  suggestions: string[];
+  summary: BuilderSummary;
+  ready: boolean;
+  questions: string[];
+  dimensions: BuilderDimension[];
 }
 
 interface ThreadMessage {
   from: "ai" | "you";
   text: string;
-  generating?: boolean;
 }
 
-interface BuilderStep {
-  key: "role" | "difficulty" | "focus" | "length";
-  question: string | ((draft: BuilderDraft) => string);
-  chips: string[];
-}
-
-const STEPS: BuilderStep[] = [
-  {
-    key: "role",
-    question: "I'll build you a custom interview. Let's start simple - what role or kind of interview do you want to practice?",
-    chips: ["Engineering manager", "UX researcher", "Med school admissions", "Startup founder pitch"],
-  },
-  {
-    key: "difficulty",
-    question: (draft) => `Got it - ${draft.role}. What level or context should I pitch the questions at?`,
-    chips: ["Entry level", "Senior", "Career switch", "First-time manager"],
-  },
-  {
-    key: "focus",
-    question: "What should we lean on? Pick a few themes - or tell me in your own words.",
-    chips: ["Leadership", "Conflict", "Strategy", "Communication", "Technical depth"],
-  },
-  {
-    key: "length",
-    question: "How long should it run - short and sharp, or a full set?",
-    chips: ["6 questions · ~20 min", "8 questions · ~25 min", "10 questions · ~30 min"],
-  },
-];
-
-const initialDraft: BuilderDraft = {
+const EMPTY_SUMMARY: BuilderSummary = {
+  title: "",
   role: "",
+  category: "",
   difficulty: "",
   focus: [],
-  count: 8,
-  minutes: 25,
-  voice: "ren",
-  language: "English",
-  questions: null,
+  minutes: 0,
+  count: 0,
 };
 
 export function BuilderScreen({
   navigate,
   startInterview,
+  user,
 }: {
   navigate: (route: TalkTRoute, params?: Record<string, unknown>) => void;
   startInterview: (interview: Interview) => void;
+  user: AppUser;
 }) {
-  const [thread, setThread] = React.useState<ThreadMessage[]>([
-    {
-      from: "ai",
-      text: "I'll build you a custom interview. Let's start simple - what role or kind of interview do you want to practice?",
-    },
-  ]);
-  const [step, setStep] = React.useState(0);
-  const [draft, setDraft] = React.useState<BuilderDraft>(initialDraft);
+  const [thread, setThread] = React.useState<ThreadMessage[]>([]);
   const [input, setInput] = React.useState("");
-  const [thinking, setThinking] = React.useState(false);
-  const [generating, setGenerating] = React.useState(false);
+  const [sending, setSending] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [turn, setTurn] = React.useState<BuilderTurn | null>(null);
+  const [selected, setSelected] = React.useState<string[]>([]);
+  const [language, setLanguage] = React.useState("English");
   const scrollRef = React.useRef<HTMLDivElement>(null);
+  const threadRef = React.useRef<ThreadMessage[]>(thread);
+  threadRef.current = thread;
+  const openedRef = React.useRef(false);
+
+  const summary = turn?.summary ?? EMPTY_SUMMARY;
+  const ready = Boolean(turn?.ready);
+  const questions = turn?.questions ?? [];
 
   React.useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [thread, thinking, generating]);
+  }, [thread, sending]);
 
-  const pushAI = React.useCallback((text: string, delay = 650) => {
-    setThinking(true);
-    window.setTimeout(() => {
-      setThinking(false);
-      setThread((messages) => [...messages, { from: "ai", text }]);
-    }, delay);
+  const send = React.useCallback(
+    async (text: string | null) => {
+      const trimmed = text?.trim() ?? "";
+      const nextThread: ThreadMessage[] = trimmed ? [...threadRef.current, { from: "you", text: trimmed }] : threadRef.current;
+
+      setError(null);
+      setSelected([]);
+      setTurn((current) => (current ? { ...current, suggestions_enabled: false, suggestions: [] } : current));
+      if (trimmed) setThread(nextThread);
+      setInput("");
+      setSending(true);
+
+      try {
+        const response = await fetch("/api/builder", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: nextThread, language }),
+        });
+        if (!response.ok) {
+          const data = (await response.json().catch(() => null)) as { error?: string } | null;
+          throw new Error(data?.error ?? `Builder error (${response.status})`);
+        }
+        const data = (await response.json()) as BuilderTurn;
+        setTurn(data);
+        if (data.response_text) setThread((messages) => [...messages, { from: "ai", text: data.response_text }]);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Something went wrong. Try again.");
+      } finally {
+        setSending(false);
+      }
+    },
+    [language],
+  );
+
+  // Open the conversation once on mount. Guard against React StrictMode's
+  // double-invoked mount effect (dev) firing two opener requests.
+  React.useEffect(() => {
+    if (openedRef.current) return;
+    openedRef.current = true;
+    void send(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSend = (value?: string) => {
-    const text = (value ?? input).trim();
-    if (!text || step >= STEPS.length) return;
+  const suggestionType = turn?.suggestion_type ?? "single";
+  const showSuggestions = Boolean(turn?.suggestions_enabled) && !sending && !ready;
 
-    const current = STEPS[step];
-    const nextDraft = applyStep(draft, current, text);
-    const nextStep = step + 1;
-
-    setThread((messages) => [...messages, { from: "you", text }]);
-    setDraft(nextDraft);
-    setInput("");
-    setStep(nextStep);
-
-    window.setTimeout(() => {
-      if (nextStep < STEPS.length) {
-        const next = STEPS[nextStep];
-        pushAI(typeof next.question === "function" ? next.question(nextDraft) : next.question);
-      } else {
-        pushAI("That's everything I need. Review the plan on the right - generate the set when you're ready.", 700);
-      }
-    }, 50);
+  const toggleSelected = (option: string) => {
+    setSelected((current) => (current.includes(option) ? current.filter((item) => item !== option) : [...current, option]));
   };
 
-  const generate = () => {
-    setGenerating(true);
-    setThread((messages) => [...messages, { from: "ai", text: "Generating a question set from your brief...", generating: true }]);
-
-    window.setTimeout(() => {
-      const questions = generateQuestions(draft);
-      setDraft((current) => ({ ...current, questions }));
-      setGenerating(false);
-      setThread((messages) => [
-        ...messages,
-        {
-          from: "ai",
-          text: `Drafted ${questions.length} questions tuned to ${draft.role.toLowerCase()}${draft.focus.length ? `, weighted toward ${draft.focus.join(", ").toLowerCase()}` : ""}. Reorder or start when ready.`,
-        },
-      ]);
-    }, 1900);
+  const submitMulti = () => {
+    if (!selected.length) return;
+    void send(selected.join(", "));
   };
 
   const startBuiltInterview = () => {
-    if (!draft.questions) return;
+    if (!turn || !ready) return;
+    const role = summary.role || summary.title || "Custom interview";
     startInterview({
       id: `custom-${Date.now()}`,
-      title: `${draft.role} (custom)`,
+      title: summary.title || `${role} (custom)`,
       subtitle: "Built with the AI builder",
       icon: "sparkles",
-      category: "Custom",
-      difficulty: draft.difficulty || "All levels",
-      count: draft.questions.length,
-      minutes: draft.minutes,
+      category: summary.category || "Custom",
+      difficulty: summary.difficulty || "All levels",
+      count: questions.length,
+      minutes: summary.minutes || Math.max(15, questions.length * 3),
       author: "You",
       source: "Custom",
       takes: 0,
-      voice: draft.voice,
-      language: draft.language,
+      voice: pickVoice(role),
+      language,
       custom: true,
       blurb: "Generated from your brief in the builder.",
-      questions: draft.questions,
+      questions,
+      focus: summary.focus,
+      dimensions: turn.dimensions,
     });
   };
 
-  const currentStep = STEPS[step];
+  const inputDisabled = sending || ready;
 
   return (
     <div className="fade-up talkt-builder-layout">
@@ -175,37 +173,73 @@ export function BuilderScreen({
         </div>
 
         <div ref={scrollRef} className="no-scrollbar" style={{ flex: 1, overflowY: "auto", padding: 28, minHeight: 0 }}>
-          <div className="flex-col gap-4" style={{ maxWidth: 620, margin: "0 auto" }}>
+          <div className="flex-col" style={{ gap: 28, maxWidth: 620, margin: "0 auto" }}>
             {thread.map((message, index) => (
-              <Bubble key={`${message.from}-${index}`} message={message} />
+              <Bubble key={`${message.from}-${index}`} message={message} user={user} />
             ))}
-            {thinking ? <TypingBubble /> : null}
+            {sending ? <TypingBubble /> : null}
+            {error ? (
+              <div className="flex items-center gap-2" style={{ fontSize: 13, color: "var(--danger, #e5484d)" }}>
+                <Icon name="alert-triangle" size={15} /> {error}
+                <button type="button" className="mono-label" style={{ cursor: "pointer", textDecoration: "underline" }} onClick={() => void send(null)}>
+                  Retry
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
 
         <div style={{ padding: "16px 28px", borderTop: "1px solid var(--border)" }}>
           <div style={{ maxWidth: 620, margin: "0 auto" }}>
-            {currentStep && step < STEPS.length ? (
+            {showSuggestions ? (
               <div className="flex items-center gap-2" style={{ marginBottom: 12, flexWrap: "wrap" }}>
-                {currentStep.chips.map((chip) => (
-                  <button key={chip} type="button" onClick={() => handleSend(chip)} className="chip card-hover" style={{ height: 30, cursor: "pointer", color: "var(--foreground)" }}>
-                    {chip}
-                  </button>
-                ))}
+                {turn!.suggestions.map((option) => {
+                  const active = selected.includes(option);
+                  if (suggestionType === "multi") {
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => toggleSelected(option)}
+                        className="chip card-hover flex items-center gap-2"
+                        style={{
+                          height: 30,
+                          cursor: "pointer",
+                          color: active ? "var(--background)" : "var(--foreground)",
+                          background: active ? "var(--foreground)" : undefined,
+                          borderColor: active ? "var(--foreground)" : undefined,
+                        }}
+                      >
+                        {active ? <Icon name="check" size={13} /> : null}
+                        {option}
+                      </button>
+                    );
+                  }
+                  return (
+                    <button key={option} type="button" onClick={() => void send(option)} className="chip card-hover" style={{ height: 30, cursor: "pointer", color: "var(--foreground)" }}>
+                      {option}
+                    </button>
+                  );
+                })}
+                {suggestionType === "multi" ? (
+                  <TalkTButton variant="secondary" size="sm" icon="check" disabled={!selected.length} onClick={submitMulti}>
+                    Submit{selected.length ? ` (${selected.length})` : ""}
+                  </TalkTButton>
+                ) : null}
               </div>
             ) : null}
             <div className="flex items-center gap-2">
               <input
                 className="field"
-                placeholder={step < STEPS.length ? "Type your answer..." : "The plan is ready - generate on the right"}
+                placeholder={ready ? "Your set is ready - start on the right" : "Type your answer..."}
                 value={input}
-                disabled={step >= STEPS.length}
+                disabled={inputDisabled}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter") handleSend();
+                  if (event.key === "Enter" && input.trim()) void send(input);
                 }}
               />
-              <TalkTButton variant="primary" icon="send" onClick={() => handleSend()} disabled={step >= STEPS.length || !input.trim()} style={{ paddingInline: 14 }} aria-label="Send" />
+              <TalkTButton variant="primary" icon="send" onClick={() => void send(input)} disabled={inputDisabled || !input.trim()} style={{ paddingInline: 14 }} aria-label="Send" />
             </div>
           </div>
         </div>
@@ -220,20 +254,15 @@ export function BuilderScreen({
           <span className="mono-label" style={{ display: "block", marginBottom: 8 }}>
             Language
           </span>
-          <select
-            className="field"
-            value={draft.language}
-            onChange={(event) => setDraft((current) => ({ ...current, language: event.target.value }))}
-            style={{ appearance: "auto" }}
-          >
-            {LANGUAGES.map((language) => (
-              <option key={language} value={language}>
-                {language}
+          <select className="field" value={language} onChange={(event) => setLanguage(event.target.value)} disabled={ready} style={{ appearance: "auto" }}>
+            {LANGUAGES.map((item) => (
+              <option key={item} value={item}>
+                {item}
               </option>
             ))}
           </select>
           <p className="caption" style={{ marginTop: 7, fontSize: 12 }}>
-            Questions, the interview, and your report use this language.
+            The builder, questions, the interview, and your report use this language.
           </p>
         </div>
 
@@ -243,43 +272,43 @@ export function BuilderScreen({
               <Icon name="sparkles" size={18} />
             </div>
             <div className="grow">
-              <div className="h3">{draft.role || "Untitled interview"}</div>
-              <div className="caption">{draft.difficulty || "Level -"}</div>
+              <div className="h3">{summary.title || summary.role || "Untitled interview"}</div>
+              <div className="caption">{[summary.category, summary.difficulty].filter(Boolean).join(" · ") || "Level -"}</div>
             </div>
           </div>
           <div className="flex-col" style={{ gap: 0 }}>
-            <DraftRow label="Language" value={draft.language} />
-            <DraftRow label="Focus" value={draft.focus.length ? draft.focus.join(" · ") : "-"} />
-            <DraftRow label="Questions" value={draft.questions ? draft.questions.length : draft.count} />
-            <DraftRow label="Duration" value={`~${draft.minutes} min`} />
-            <DraftRow label="Interviewer" value={draft.role ? `${VOICES.find((voice) => voice.id === draft.voice)?.name ?? "-"} · assigned` : "Auto-assigned"} last />
+            <DraftRow label="Language" value={language} />
+            <DraftRow label="Focus" value={summary.focus.length ? summary.focus.join(" · ") : "-"} />
+            <DraftRow label="Questions" value={ready ? questions.length : summary.count || "-"} />
+            <DraftRow label="Duration" value={summary.minutes ? `~${summary.minutes} min` : "-"} />
+            <DraftRow label="Interviewer" value={summary.role ? `${VOICES.find((voice) => voice.id === pickVoice(summary.role))?.name ?? "-"} · assigned` : "Auto-assigned"} last />
           </div>
         </div>
 
-        {!draft.questions ? (
-          <TalkTButton variant="primary" icon="sparkles" className="btn-block" disabled={step < STEPS.length || generating} onClick={generate}>
-            {generating ? "Generating..." : "Generate question set"}
-          </TalkTButton>
-        ) : null}
-        {step < STEPS.length && !generating ? (
-          <p className="caption" style={{ marginTop: 12, textAlign: "center" }}>
-            Answer the builder&apos;s questions to unlock generation.
+        {!ready ? (
+          <p className="caption" style={{ textAlign: "center" }}>
+            Chat with the builder on the left. It will draft a tuned set when it has enough to go on.
           </p>
         ) : null}
 
-        {generating ? (
-          <div className="card rounded-lg" style={{ padding: 18, marginTop: 4 }}>
-            <div className="flex items-center gap-2 mono" style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
-              <Icon name="loader" size={15} className="spin" /> Drafting questions<span className="cursor-blink" />
-            </div>
-          </div>
-        ) : null}
-
-        {draft.questions ? (
+        {ready ? (
           <div className="fade-up">
-            <SectionHeader num="03" label="Generated set" />
+            {turn!.dimensions.length ? (
+              <>
+                <SectionHeader num="03" label="Grading criteria" />
+                <div className="flex items-center" style={{ flexWrap: "wrap", gap: 6, marginBottom: 18 }}>
+                  {turn!.dimensions.map((dimension) => (
+                    <span key={dimension.key} className="chip" style={{ height: 28 }}>
+                      {dimension.label}
+                    </span>
+                  ))}
+                </div>
+              </>
+            ) : null}
+
+            <SectionHeader num={turn!.dimensions.length ? "04" : "03"} label="Generated set" />
             <ol style={{ listStyle: "none", margin: "0 0 18px", padding: 0 }}>
-              {draft.questions.map((question, index) => (
+              {questions.map((question, index) => (
                 <li key={question} className="flex gap-3" style={{ padding: "11px 0", borderBottom: "1px solid var(--border)", alignItems: "baseline" }}>
                   <span className="mono" style={{ fontSize: 11, color: "var(--dimmed)", width: 20, flexShrink: 0 }}>
                     {String(index + 1).padStart(2, "0")}
@@ -292,14 +321,9 @@ export function BuilderScreen({
               <TalkTButton variant="primary" size="lg" icon="phone" className="btn-block" onClick={startBuiltInterview}>
                 Start interview
               </TalkTButton>
-              <div className="flex gap-2">
-                <TalkTButton variant="secondary" icon="refresh" className="grow" onClick={generate}>
-                  Regenerate
-                </TalkTButton>
-                <TalkTButton variant="ghost" className="grow" onClick={() => navigate("library")}>
-                  Save & exit
-                </TalkTButton>
-              </div>
+              <TalkTButton variant="ghost" className="btn-block" onClick={() => navigate("library")}>
+                Save & exit
+              </TalkTButton>
             </div>
           </div>
         ) : null}
@@ -308,30 +332,23 @@ export function BuilderScreen({
   );
 }
 
-function Bubble({ message }: { message: ThreadMessage }) {
+function Bubble({ message, user }: { message: ThreadMessage; user: AppUser }) {
   const you = message.from === "you";
   return (
-    <div className="fade-up flex" style={{ gap: 12, flexDirection: you ? "row-reverse" : "row" }}>
-      {!you ? <AgentAvatar size={30} /> : null}
+    <div className="fade-up flex" style={{ gap: 12, flexDirection: you ? "row-reverse" : "row", alignItems: "flex-start" }}>
+      {you ? <Avatar name={user.name} src={user.image} size={30} /> : <AgentAvatar size={30} />}
       <div
         style={{
           maxWidth: "78%",
-          padding: "11px 14px",
+          padding: "13px 17px",
           fontSize: 14,
-          lineHeight: 1.55,
+          lineHeight: 1.65,
           border: "1px solid var(--border)",
           background: you ? "var(--foreground)" : "var(--card)",
           color: you ? "var(--background)" : "var(--foreground)",
         }}
       >
-        {message.generating ? (
-          <span className="flex items-center gap-2 mono" style={{ fontSize: 12 }}>
-            <Icon name="loader" size={14} className="spin" />
-            {message.text}
-          </span>
-        ) : (
-          message.text
-        )}
+        {message.text}
       </div>
     </div>
   );
@@ -359,42 +376,8 @@ function DraftRow({ label, value, last }: { label: string; value: React.ReactNod
   );
 }
 
-function applyStep(draft: BuilderDraft, step: BuilderStep, value: string): BuilderDraft {
-  const next = { ...draft };
-  if (step.key === "role") {
-    next.role = value;
-    next.voice = VOICES[value.length % VOICES.length].id;
-  } else if (step.key === "difficulty") {
-    next.difficulty = value;
-  } else if (step.key === "focus") {
-    next.focus = value
-      .split(/,|·/)
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .slice(0, 4);
-  } else if (step.key === "length") {
-    const questionMatch = value.match(/(\d+)\s*questions/i);
-    const minuteMatch = value.match(/(\d+)\s*min/i);
-    next.count = questionMatch ? Number(questionMatch[1]) : 8;
-    next.minutes = minuteMatch ? Number(minuteMatch[1]) : 25;
-  }
-  return next;
-}
-
-function generateQuestions(draft: BuilderDraft) {
-  const role = draft.role || "the role";
-  const pools = [
-    `Tell me about a time your work as ${role.toLowerCase()} didn't go to plan. What did you own?`,
-    `Walk me through how you'd approach your first month as ${role.toLowerCase()}.`,
-    `What does great look like in this role, and how would you measure it?`,
-    `Describe a hard tradeoff you've made. What did you give up, and why?`,
-    "How do you handle disagreement with someone more senior than you?",
-    "Tell me about a decision you made with incomplete information.",
-    "What's a skill you're deliberately working on right now?",
-    "Walk me through a project end to end - your part, not the team's.",
-    "How do you prioritize when everything feels urgent?",
-    "What would your last team say is hardest about working with you?",
-  ];
-  const focused = draft.focus.map((focus) => `On ${focus.toLowerCase()}: give me a specific example where it made the difference.`);
-  return [...focused, ...pools].slice(0, draft.count || 8);
+// Deterministic voice pick so the same role keeps the same interviewer.
+function pickVoice(role: string): string {
+  if (!role) return "ren";
+  return VOICES[role.length % VOICES.length].id;
 }
