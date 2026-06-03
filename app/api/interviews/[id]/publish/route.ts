@@ -25,8 +25,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   try {
     if (!isRecord(raw)) throw new ValidationError("Body must be an object");
     anonymous = optBool(raw.anonymous, "anonymous") ?? false;
+    // Author is credited by their own name by default; when no display name is
+    // supplied, publish() falls back to the owner's stored account name.
     displayName = anonymous ? undefined : optString(raw.displayName, "displayName", 80);
-    if (!anonymous && !displayName) throw new ValidationError("A display name is required unless publishing anonymously");
   } catch (error) {
     if (error instanceof ValidationError) return Response.json({ error: error.message }, { status: 400 });
     return Response.json({ error: "Invalid request" }, { status: 400 });

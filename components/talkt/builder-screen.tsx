@@ -69,7 +69,10 @@ export function BuilderScreen({
   const [publishing, setPublishing] = React.useState(false);
   const [publishError, setPublishError] = React.useState<string | null>(null);
   const [published, setPublished] = React.useState(false);
-  const persistedIdRef = React.useRef<string | null>(null);
+  const [starting, setStarting] = React.useState(false);
+  // The persisted (private) DB row for this built interview, created once and
+  // shared by Start and Publish.
+  const persistedRef = React.useRef<Interview | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const threadRef = React.useRef<ThreadMessage[]>(thread);
   threadRef.current = thread;
@@ -138,31 +141,6 @@ export function BuilderScreen({
     void send(selected.join(", "));
   };
 
-  const startBuiltInterview = () => {
-    if (!turn || !ready) return;
-    const role = summary.role || summary.title || "Custom interview";
-    startInterview({
-      id: `custom-${Date.now()}`,
-      title: summary.title || `${role} (custom)`,
-      subtitle: "Built with the AI builder",
-      icon: "sparkles",
-      category: summary.category || "Custom",
-      difficulty: summary.difficulty || "All levels",
-      count: questions.length,
-      minutes: summary.minutes || Math.max(15, questions.length * 3),
-      author: "You",
-      source: "Custom",
-      takes: 0,
-      voice: pickVoice(role),
-      language,
-      custom: true,
-      blurb: "Generated from your brief in the builder.",
-      questions,
-      focus: summary.focus,
-      dimensions: turn.dimensions,
-    });
-  };
-
   const buildPayload = React.useCallback((): BuiltInterviewPayload => {
     const qs = turn?.questions ?? [];
     const role = summary.role || summary.title || "Custom interview";
@@ -182,15 +160,62 @@ export function BuilderScreen({
     };
   }, [summary, language, turn]);
 
+  // Persist the built interview as a private DB row exactly once. Both Start and
+  // Publish funnel through here so they operate on the same row.
+  const ensurePersisted = React.useCallback(async (): Promise<Interview> => {
+    if (persistedRef.current) return persistedRef.current;
+    const saved = await persistBuiltInterview(buildPayload());
+    persistedRef.current = saved;
+    return saved;
+  }, [buildPayload]);
+
+  // Local-only interview used if persistence fails (e.g. DB unreachable), so the
+  // user can still run it without a DB row.
+  const localInterview = React.useCallback((): Interview => {
+    const qs = turn?.questions ?? [];
+    const role = summary.role || summary.title || "Custom interview";
+    return {
+      id: `custom-${Date.now()}`,
+      title: summary.title || `${role} (custom)`,
+      subtitle: "Built with the AI builder",
+      icon: "sparkles",
+      category: summary.category || "Custom",
+      difficulty: summary.difficulty || "All levels",
+      count: qs.length,
+      minutes: summary.minutes || Math.max(15, qs.length * 3),
+      author: "You",
+      source: "Custom",
+      takes: 0,
+      voice: pickVoice(role),
+      language,
+      custom: true,
+      blurb: "Generated from your brief in the builder.",
+      questions: qs,
+      focus: summary.focus,
+      dimensions: turn?.dimensions ?? [],
+    };
+  }, [summary, language, turn]);
+
+  // Start saves the interview as private (giving it a real DB row), then opens
+  // the lobby. Falls back to a local-only interview if persistence fails.
+  const startBuiltInterview = async () => {
+    if (!turn || !ready || starting) return;
+    setStarting(true);
+    try {
+      startInterview(await ensurePersisted());
+    } catch {
+      startInterview(localInterview());
+    } finally {
+      setStarting(false);
+    }
+  };
+
   const onConfirmPublish = async (opts: { displayName?: string; anonymous: boolean }) => {
     setPublishing(true);
     setPublishError(null);
     try {
-      if (!persistedIdRef.current) {
-        const saved = await persistBuiltInterview(buildPayload());
-        persistedIdRef.current = saved.id;
-      }
-      await publishInterview(persistedIdRef.current, opts);
+      const saved = await ensurePersisted();
+      await publishInterview(saved.id, opts);
       setPublished(true);
       setDialogOpen(false);
     } catch (err) {
@@ -362,8 +387,8 @@ export function BuilderScreen({
               ))}
             </ol>
             <div className="flex-col gap-2">
-              <TalkTButton variant="primary" size="lg" icon="phone" className="btn-block" onClick={startBuiltInterview}>
-                Start interview
+              <TalkTButton variant="primary" size="lg" icon="phone" className="btn-block" disabled={starting} onClick={() => void startBuiltInterview()}>
+                {starting ? "Saving..." : "Start interview"}
               </TalkTButton>
               {published ? (
                 <span className="chip btn-block flex items-center justify-center" style={{ gap: 6, height: 40 }}>

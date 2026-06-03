@@ -5,10 +5,9 @@ import * as React from "react";
 import { Icon, TalkTButton } from "@/components/talkt/primitives";
 
 /**
- * Publish-to-directory dialog. Collects the public display name and an
- * anonymous toggle, then hands them to `onConfirm`. Pure UI — the caller wires
- * up persistence/publish (builder persists first; the detail page already has a
- * stored interview).
+ * Contribute-to-the-community dialog. The author is credited by their own name
+ * by default; they may opt to publish anonymously instead. Pure UI — the caller
+ * wires up persistence/publish.
  */
 // Mount this only while open (callers render it conditionally) so each open
 // starts with fresh form state — no reset effect needed.
@@ -25,7 +24,6 @@ export function PublishDialog({
   onConfirm: (opts: { displayName?: string; anonymous: boolean }) => void;
   onClose: () => void;
 }) {
-  const [name, setName] = React.useState(defaultName);
   const [anonymous, setAnonymous] = React.useState(false);
 
   React.useEffect(() => {
@@ -36,7 +34,7 @@ export function PublishDialog({
     return () => document.removeEventListener("keydown", onKey);
   }, [busy, onClose]);
 
-  const canConfirm = anonymous || name.trim().length > 0;
+  const credit = anonymous ? "Community" : defaultName || "Community";
 
   return (
     <div
@@ -53,26 +51,24 @@ export function PublishDialog({
         style={{ width: "100%", maxWidth: 440, padding: 26 }}
       >
         <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
-          <span className="mono-label">Publish to directory</span>
+          <span className="mono-label">Contribute to the community</span>
           <button type="button" onClick={() => (busy ? null : onClose())} className="icon-btn" style={{ width: 30, height: 30, border: 0 }} aria-label="Close">
             <Icon name="x" size={15} />
           </button>
         </div>
         <p className="caption" style={{ marginBottom: 20 }}>
-          Anyone can find, take, and vote on this interview. You can&apos;t edit it after publishing.
+          Share this interview template with the community. Anyone can find and take it, and members can vote the template up or down.
         </p>
 
-        <label className="mono-label" style={{ display: "block", marginBottom: 8 }}>
-          Shown as
-        </label>
-        <input
-          className="field"
-          value={anonymous ? "" : name}
-          placeholder={anonymous ? "Anonymous" : "Your display name"}
-          disabled={anonymous || busy}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={80}
-        />
+        <div className="flex items-center justify-between" style={{ padding: "12px 14px", border: "1px solid var(--border)", background: "var(--surface-2)" }}>
+          <span className="caption" style={{ color: "var(--foreground)", fontWeight: 500 }}>
+            Credited to
+          </span>
+          <span className="mono flex items-center gap-1" style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
+            <Icon name="user" size={13} />
+            {credit}
+          </span>
+        </div>
 
         <button
           type="button"
@@ -112,8 +108,8 @@ export function PublishDialog({
           <TalkTButton
             variant="primary"
             icon="shield"
-            disabled={!canConfirm || busy}
-            onClick={() => onConfirm({ displayName: anonymous ? undefined : name.trim(), anonymous })}
+            disabled={busy}
+            onClick={() => onConfirm({ displayName: anonymous ? undefined : defaultName, anonymous })}
           >
             {busy ? "Publishing..." : "Publish"}
           </TalkTButton>
