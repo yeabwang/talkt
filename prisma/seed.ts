@@ -2,11 +2,18 @@
 //
 // Run with: npm run db:seed  (after the migration is applied).
 // Idempotent: upserts by the mock id so links stay stable across re-seeds.
+//
+// Loads .env.local first, then dynamically imports the Prisma client so
+// DATABASE_URL is set before the singleton initializes (same as db-check.ts).
+import { config } from "dotenv";
+config({ path: ".env.local" });
+
 import { TEMPLATES } from "../components/talkt/data";
 import { toLanguageCode } from "../lib/language";
-import { prisma } from "../lib/prisma";
 
 async function main() {
+  const { prisma } = await import("../lib/prisma");
+
   for (const t of TEMPLATES) {
     // Curated interviews are attributed to TalkT (no public author credit);
     // community-authored mock entries keep their author name as the credit.
@@ -48,13 +55,10 @@ async function main() {
     });
   }
   console.log(`Seeded ${TEMPLATES.length} interviews.`);
+  await prisma.$disconnect();
 }
 
-main()
-  .catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  })
-  .finally(() => {
-    void prisma.$disconnect();
-  });
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

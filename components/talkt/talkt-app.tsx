@@ -86,9 +86,16 @@ export function TalkTApp() {
   const attempts = ATTEMPTS;
 
   // Profile (name + photo) is resolved once at login and cached in
-  // sessionStorage; every screen reads the cached copy instead of re-deriving
-  // from Clerk on each render/navigation.
-  const [user, setUser] = React.useState<AppUser | null>(() => readCachedUser()?.user ?? null);
+  // sessionStorage. Start null so the server render and the first client render
+  // match (no hydration mismatch); the cached copy is read on mount below.
+  const [user, setUser] = React.useState<AppUser | null>(null);
+
+  // Fast first paint: hydrate from the session cache after mount (client only,
+  // so it never diverges from the server's null render).
+  React.useEffect(() => {
+    const cached = readCachedUser();
+    if (cached) setUser(cached.user);
+  }, []);
 
   React.useEffect(() => {
     if (!isLoaded) return;
