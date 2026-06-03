@@ -327,10 +327,27 @@ export function InterviewDetailScreen({
         <span className="chip">{interview.source}</span>
         <span className="chip">{interview.difficulty}</span>
       </div>
-      <div className="flex items-start justify-between" style={{ gap: 20, marginBottom: 10 }}>
-        <h1 className="h1-app" style={{ maxWidth: 620 }}>
-          {interview.title}
-        </h1>
+      <div className="flex items-start justify-between" style={{ gap: 20, marginBottom: 30 }}>
+        <div style={{ minWidth: 0 }}>
+          <h1 className="h1-app" style={{ maxWidth: 620, marginBottom: 10 }}>
+            {interview.title}
+          </h1>
+          <p className="body-lg muted" style={{ maxWidth: 560, margin: 0 }}>
+            {interview.blurb}
+          </p>
+          <div className="flex items-center" style={{ gap: 16, marginTop: 16, flexWrap: "wrap" }}>
+            <AuthorCredit interview={{ ...interview, anonymous: pub.anonymous, author: pub.authorName ?? interview.author }} />
+            {canPublish ? (
+              <TalkTButton variant="secondary" size="sm" icon="shield" onClick={() => setDialogOpen(true)}>
+                Publish
+              </TalkTButton>
+            ) : pub.published ? (
+              <span className="chip" style={{ gap: 6 }}>
+                <Icon name="check" size={12} /> Published
+              </span>
+            ) : null}
+          </div>
+        </div>
         <VoteControl
           interviewId={interview.id}
           upvotes={interview.upvotes}
@@ -340,22 +357,6 @@ export function InterviewDetailScreen({
           size="lg"
           orientation="vertical"
         />
-      </div>
-      <p className="body-lg muted" style={{ maxWidth: 560, marginBottom: 22 }}>
-        {interview.blurb}
-      </p>
-
-      <div className="flex items-center" style={{ gap: 16, marginBottom: 30, flexWrap: "wrap" }}>
-        <AuthorCredit interview={{ ...interview, anonymous: pub.anonymous, author: pub.authorName ?? interview.author }} />
-        {canPublish ? (
-          <TalkTButton variant="secondary" size="sm" icon="shield" onClick={() => setDialogOpen(true)} style={{ marginLeft: "auto" }}>
-            Publish
-          </TalkTButton>
-        ) : pub.published ? (
-          <span className="chip" style={{ marginLeft: "auto", gap: 6 }}>
-            <Icon name="check" size={12} /> Published
-          </span>
-        ) : null}
       </div>
 
       <div className="flex items-center" style={{ gap: 0, marginBottom: 40, flexWrap: "wrap", border: "1px solid var(--border)" }}>
