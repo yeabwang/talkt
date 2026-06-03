@@ -157,11 +157,14 @@ export function TalkTApp() {
     };
   }, [isLoaded, clerkUser]);
 
+  // Recommendations re-rank the directory (suitable interviews float to the top)
+  // — not a separate section. Fall back to plain rank order until they load.
   const allInterviews = React.useMemo(() => {
-    const ids = new Set(directory.map((interview) => interview.id));
+    const base = recommended.length ? recommended : directory;
+    const ids = new Set(base.map((interview) => interview.id));
     const extras = sessionInterviews.filter((interview) => !ids.has(interview.id));
-    return [...directory, ...extras];
-  }, [directory, sessionInterviews]);
+    return [...base, ...extras];
+  }, [recommended, directory, sessionInterviews]);
   const findInterview = React.useCallback((id?: string) => allInterviews.find((interview) => interview.id === id), [allInterviews]);
   const toggleTheme = () => setTheme((current) => (current === "dark" ? "light" : "dark"));
 
@@ -213,12 +216,12 @@ export function TalkTApp() {
   if (route === "dashboard") {
     body = <DashboardScreen user={user} navigate={navigate} startInterview={startInterview} attempts={attempts} allInterviews={allInterviews} />;
   } else if (route === "library") {
-    body = <LibraryScreen navigate={navigate} startInterview={startInterview} allInterviews={allInterviews} recommended={recommended} />;
+    body = <LibraryScreen navigate={navigate} startInterview={startInterview} allInterviews={allInterviews} />;
   } else if (route === "detail") {
     body = interview ? (
       <InterviewDetailScreen interview={interview} navigate={navigate} startInterview={startInterview} user={user} />
     ) : (
-      <LibraryScreen navigate={navigate} startInterview={startInterview} allInterviews={allInterviews} recommended={recommended} />
+      <LibraryScreen navigate={navigate} startInterview={startInterview} allInterviews={allInterviews} />
     );
   } else if (route === "builder") {
     body = <BuilderScreen navigate={navigate} startInterview={startInterview} user={user} />;

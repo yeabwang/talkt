@@ -12,8 +12,12 @@ interface VoteState {
 
 /**
  * Reddit-style up/down vote control with transparent counts. Optimistically
- * updates, posts to /api/interviews/[id]/vote, and reverts on failure. Disabled
- * for interviews the caller owns (the API rejects self-votes anyway).
+ * updates on click (flips immediately), posts to /api/interviews/[id]/vote, and
+ * reverts on failure. Active up turns green, active down turns red. Disabled for
+ * interviews the caller owns (the API rejects self-votes anyway).
+ *
+ * Mounted per interview (cards/detail are keyed by id), so it seeds from props
+ * once and does not re-sync afterwards.
  */
 export function VoteControl({
   interviewId,
@@ -22,13 +26,15 @@ export function VoteControl({
   myVote = 0,
   disabled = false,
   size = "sm",
+  orientation = "horizontal",
 }: {
   interviewId: string;
   upvotes?: number;
   downvotes?: number;
   myVote?: -1 | 0 | 1;
   disabled?: boolean;
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
+  orientation?: "horizontal" | "vertical";
 }) {
   const [state, setState] = React.useState<VoteState>({
     upvotes: upvotes ?? 0,
@@ -36,25 +42,20 @@ export function VoteControl({
     myVote,
   });
   const [pending, setPending] = React.useState(false);
-  // Mirror the latest state into a ref (in an effect, not during render) so the
-  // async vote handler can read the pre-click snapshot for optimistic revert.
-  // The control is mounted per interview (cards are keyed by id), so it does not
-  // need to re-sync from props after mount.
-  const stateRef = React.useRef(state);
-  React.useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
 
   const cast = React.useCallback(
     async (direction: 1 | -1) => {
       if (disabled || pending) return;
-      const prev = stateRef.current;
+      const prev = state;
       const nextVote: -1 | 0 | 1 = prev.myVote === direction ? 0 : direction;
 
-      // Optimistic: recompute tallies from the delta between prev.myVote and nextVote.
-      const up = prev.upvotes - (prev.myVote === 1 ? 1 : 0) + (nextVote === 1 ? 1 : 0);
-      const down = prev.downvotes - (prev.myVote === -1 ? 1 : 0) + (nextVote === -1 ? 1 : 0);
-      setState({ upvotes: up, downvotes: down, myVote: nextVote });
+      // Optimistic: shift tallies by the delta between the old and new vote.
+      const next: VoteState = {
+        upvotes: prev.upvotes - (prev.myVote === 1 ? 1 : 0) + (nextVote === 1 ? 1 : 0),
+        downvotes: prev.downvotes - (prev.myVote === -1 ? 1 : 0) + (nextVote === -1 ? 1 : 0),
+        myVote: nextVote,
+      };
+      setState(next);
       setPending(true);
 
       try {
@@ -72,21 +73,26 @@ export function VoteControl({
         setPending(false);
       }
     },
-    [disabled, interviewId, pending],
+    [disabled, pending, state, interviewId],
   );
 
-  const iconSize = size === "md" ? 16 : 14;
-  const fontSize = size === "md" ? 13 : 12;
+  const dims = size === "lg" ? { icon: 22, font: 15, pad: 12 } : size === "md" ? { icon: 18, font: 13, pad: 9 } : { icon: 14, font: 12, pad: 7 };
+  const vertical = orientation === "vertical";
 
   return (
-    <div className="flex items-center gap-1" role="group" aria-label="Vote on this interview">
+    <div
+      className="flex items-center"
+      role="group"
+      aria-label="Vote on this interview"
+      style={{ flexDirection: vertical ? "column" : "row", gap: vertical ? 0 : 6, border: vertical ? "1px solid var(--border)" : undefined, background: vertical ? "var(--border)" : undefined }}
+    >
       <VoteButton
         direction="up"
         count={state.upvotes}
         active={state.myVote === 1}
         disabled={disabled}
-        iconSize={iconSize}
-        fontSize={fontSize}
+        vertical={vertical}
+        dims={dims}
         onClick={(e) => {
           e.stopPropagation();
           void cast(1);
@@ -97,8 +103,8 @@ export function VoteControl({
         count={state.downvotes}
         active={state.myVote === -1}
         disabled={disabled}
-        iconSize={iconSize}
-        fontSize={fontSize}
+        vertical={vertical}
+        dims={dims}
         onClick={(e) => {
           e.stopPropagation();
           void cast(-1);
@@ -113,19 +119,21 @@ function VoteButton({
   count,
   active,
   disabled,
-  iconSize,
-  fontSize,
+  vertical,
+  dims,
   onClick,
 }: {
   direction: "up" | "down";
   count: number;
   active: boolean;
   disabled: boolean;
-  iconSize: number;
-  fontSize: number;
+  vertical: boolean;
+  dims: { icon: number; font: number; pad: number };
   onClick: (e: React.MouseEvent) => void;
 }) {
   const up = direction === "up";
+  const activeColor = up ? "var(--success)" : "var(--error)";
+
   return (
     <button
       type="button"
@@ -134,21 +142,25 @@ function VoteButton({
       aria-pressed={active}
       aria-label={`${up ? "Upvote" : "Downvote"} (${count})`}
       title={disabled ? "You can't vote on your own interview" : up ? "Upvote" : "Downvote"}
-      className="mono flex items-center gap-1"
+      className="mono flex items-center justify-center"
       style={{
-        height: 26,
-        padding: "0 8px",
+        flexDirection: vertical ? "column" : "row",
+        gap: vertical ? 3 : 5,
+        width: vertical ? "100%" : undefined,
+        padding: vertical ? `${dims.pad}px 14px` : `0 ${dims.pad + 1}px`,
+        height: vertical ? undefined : dims.icon + 12,
         cursor: disabled ? "default" : "pointer",
-        border: "1px solid var(--border)",
-        background: active ? "var(--foreground)" : "var(--card)",
-        color: active ? "var(--background)" : "var(--muted-foreground)",
+        border: vertical ? "none" : "1px solid var(--border)",
+        background: active ? activeColor : "var(--card)",
+        color: active ? "#fff" : "var(--muted-foreground)",
         opacity: disabled ? 0.5 : 1,
-        fontSize,
+        fontSize: dims.font,
+        fontWeight: 600,
         lineHeight: 1,
         transition: "background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out)",
       }}
     >
-      <Icon name={up ? "chevron-up" : "chevron-down"} size={iconSize} />
+      <Icon name={up ? "chevron-up" : "chevron-down"} size={dims.icon} stroke={2.25} />
       {count}
     </button>
   );

@@ -30,12 +30,10 @@ export function LibraryScreen({
   navigate,
   startInterview,
   allInterviews,
-  recommended = [],
 }: {
   navigate: (route: TalkTRoute, params?: Record<string, unknown>) => void;
   startInterview: (interview: Interview) => void;
   allInterviews: Interview[];
-  recommended?: Interview[];
 }) {
   const [query, setQuery] = React.useState("");
   const [filters, setFilters] = React.useState<LibraryFilters>(EMPTY_FILTERS);
@@ -72,18 +70,6 @@ export function LibraryScreen({
         </div>
         <h1 className="h1-app">Pick an interview, or build one.</h1>
       </div>
-
-      {recommended.length >= 3 ? (
-        <div style={{ marginBottom: 34 }}>
-          <SectionHeader label="For you" />
-          <div className="stagger talkt-library-grid" style={{ background: "var(--border)", border: "1px solid var(--border)" }}>
-            {recommended.slice(0, 3).map((interview) => (
-              <TemplateCard key={`rec-${interview.id}`} interview={interview} onOpen={() => navigate("detail", { interviewId: interview.id })} onStart={() => startInterview(interview)} />
-            ))}
-            <div style={{ background: "var(--background)" }} />
-          </div>
-        </div>
-      ) : null}
 
       <div className="flex items-center gap-2" style={{ marginBottom: 22 }}>
         <div className="relative" style={{ flex: 1, minWidth: 0 }}>
@@ -349,14 +335,6 @@ export function InterviewDetailScreen({
       </p>
 
       <div className="flex items-center" style={{ gap: 16, marginBottom: 30, flexWrap: "wrap" }}>
-        <VoteControl
-          interviewId={interview.id}
-          upvotes={interview.upvotes}
-          downvotes={interview.downvotes}
-          myVote={interview.myVote}
-          disabled={interview.mine}
-          size="md"
-        />
         <AuthorCredit interview={{ ...interview, anonymous: pub.anonymous, author: pub.authorName ?? interview.author }} />
         {canPublish ? (
           <TalkTButton variant="secondary" size="sm" icon="shield" onClick={() => setDialogOpen(true)} style={{ marginLeft: "auto" }}>
@@ -414,6 +392,24 @@ export function InterviewDetailScreen({
         </div>
 
         <div style={{ position: "sticky", top: 80 }}>
+          <div className="card rounded-lg flex items-center justify-between" style={{ padding: 18, marginBottom: 14, gap: 12 }}>
+            <div>
+              <div className="mono-label">Community vote</div>
+              <div className="caption" style={{ fontSize: 12, marginTop: 4 }}>
+                {interview.mine ? "Your interview" : "Was this useful?"}
+              </div>
+            </div>
+            <VoteControl
+              interviewId={interview.id}
+              upvotes={interview.upvotes}
+              downvotes={interview.downvotes}
+              myVote={interview.myVote}
+              disabled={interview.mine}
+              size="lg"
+              orientation="vertical"
+            />
+          </div>
+
           <div className="card rounded-lg" style={{ padding: 24 }}>
             <div className="mono-label" style={{ marginBottom: 18 }}>
               Your session
@@ -483,7 +479,7 @@ export function InterviewDetailScreen({
 
       {dialogOpen ? (
         <PublishDialog
-          defaultName={user?.firstName ?? user?.name ?? ""}
+          defaultName={user?.name ?? user?.firstName ?? ""}
           busy={publishing}
           error={publishError}
           onConfirm={(opts) => void onConfirmPublish(opts)}

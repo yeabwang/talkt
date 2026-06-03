@@ -384,7 +384,7 @@ export function BuilderScreen({
 
       {dialogOpen ? (
         <PublishDialog
-          defaultName={user.firstName ?? user.name ?? ""}
+          defaultName={user.name ?? user.firstName ?? ""}
           busy={publishing}
           error={publishError}
           onConfirm={(opts) => void onConfirmPublish(opts)}
