@@ -327,9 +327,20 @@ export function InterviewDetailScreen({
         <span className="chip">{interview.source}</span>
         <span className="chip">{interview.difficulty}</span>
       </div>
-      <h1 className="h1-app" style={{ marginBottom: 10, maxWidth: 620 }}>
-        {interview.title}
-      </h1>
+      <div className="flex items-start justify-between" style={{ gap: 20, marginBottom: 10 }}>
+        <h1 className="h1-app" style={{ maxWidth: 620 }}>
+          {interview.title}
+        </h1>
+        <VoteControl
+          interviewId={interview.id}
+          upvotes={interview.upvotes}
+          downvotes={interview.downvotes}
+          myVote={interview.myVote}
+          disabled={interview.mine}
+          size="lg"
+          orientation="vertical"
+        />
+      </div>
       <p className="body-lg muted" style={{ maxWidth: 560, marginBottom: 22 }}>
         {interview.blurb}
       </p>
@@ -392,24 +403,6 @@ export function InterviewDetailScreen({
         </div>
 
         <div style={{ position: "sticky", top: 80 }}>
-          <div className="card rounded-lg flex items-center justify-between" style={{ padding: 18, marginBottom: 14, gap: 12 }}>
-            <div>
-              <div className="mono-label">Community vote</div>
-              <div className="caption" style={{ fontSize: 12, marginTop: 4 }}>
-                {interview.mine ? "Your interview" : "Was this useful?"}
-              </div>
-            </div>
-            <VoteControl
-              interviewId={interview.id}
-              upvotes={interview.upvotes}
-              downvotes={interview.downvotes}
-              myVote={interview.myVote}
-              disabled={interview.mine}
-              size="lg"
-              orientation="vertical"
-            />
-          </div>
-
           <div className="card rounded-lg" style={{ padding: 24 }}>
             <div className="mono-label" style={{ marginBottom: 18 }}>
               Your session
