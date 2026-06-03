@@ -6,7 +6,7 @@ import { useClerk, useUser } from "@clerk/nextjs";
 import { fetchDirectory, fetchRecommended } from "@/components/talkt/api";
 import { AppShell, type TalkTRoute } from "@/components/talkt/app-shell";
 import { BuilderScreen } from "@/components/talkt/builder-screen";
-import { ATTEMPTS, CUSTOM_INTERVIEWS, TEMPLATES, type AppUser, type Interview } from "@/components/talkt/data";
+import { ATTEMPTS, type AppUser, type Interview } from "@/components/talkt/data";
 import { DashboardScreen } from "@/components/talkt/dashboard-screen";
 import { LibraryScreen, InterviewDetailScreen } from "@/components/talkt/library-screen";
 import { LiveInterviewScreen } from "@/components/talkt/live-screen";
@@ -78,10 +78,10 @@ export function TalkTApp() {
   const [theme, setTheme] = React.useState<Theme>("dark");
   const [route, setRoute] = React.useState<TalkTRoute>("dashboard");
   const [params, setParams] = React.useState<Record<string, unknown>>({});
-  const [sessionInterviews, setSessionInterviews] = React.useState<Interview[]>(CUSTOM_INTERVIEWS);
-  // The live, ranked directory from the API. Falls back to mock TEMPLATES until
-  // it loads (or if the DB is unreachable in local/dev).
-  const [directory, setDirectory] = React.useState<Interview[]>(TEMPLATES);
+  // Custom interviews the user builds this session but hasn't published yet.
+  const [sessionInterviews, setSessionInterviews] = React.useState<Interview[]>([]);
+  // The live, ranked directory from the API (the only source of templates now).
+  const [directory, setDirectory] = React.useState<Interview[]>([]);
   const [recommended, setRecommended] = React.useState<Interview[]>([]);
   const attempts = ATTEMPTS;
 
@@ -143,7 +143,7 @@ export function TalkTApp() {
         const dir = await fetchDirectory();
         if (!cancelled && dir.length) setDirectory(dir);
       } catch {
-        /* DB unreachable — keep the mock TEMPLATES fallback */
+        /* DB unreachable — directory stays empty */
       }
       try {
         const rec = await fetchRecommended();

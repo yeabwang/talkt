@@ -10,6 +10,7 @@ export interface BuilderSummary {
   role: string;
   category: string;
   difficulty: string;
+  blurb: string;
   focus: string[];
   minutes: number;
   count: number;
@@ -53,6 +54,7 @@ You MUST reply with a single strict JSON object and NOTHING else, matching exact
     "role": string,
     "category": string,                          // e.g. Engineering, Product, Healthcare, Business, Design, General
     "difficulty": string,                        // e.g. Entry level, Mid, Senior, All levels
+    "blurb": string,                             // ONE concise sentence describing what this interview practices (shown on its card)
     "focus": string[],                           // themes the interview leans on
     "minutes": number,                           // estimated duration; 0 until known
     "count": number                              // number of questions; 0 until known
@@ -66,7 +68,7 @@ RULES:
 - Use "single" for mutually exclusive choices (level, length). Use "multi" for themes/focus the user can combine.
 - Disable suggestions (suggestions_enabled=false, type=null, suggestions=[]) when a free-text answer fits better, e.g. the opening role question.
 - Keep building summary as you learn more; never blank out a field you already know.
-- When you have enough (role, level, focus, length), set ready=true and produce: a tuned, ordered question set spoken aloud in an interview (count questions, no numbering in the text), an honest minutes estimate, a fitting category, and 4-6 dimensions — the core grading criteria for THIS interview (key is a lowercase slug, label is human-readable in ${language}).
+- When you have enough (role, level, focus, length), set ready=true and produce: a tuned, ordered question set spoken aloud in an interview (count questions, no numbering in the text), an honest minutes estimate, a fitting category, a polished one-sentence "blurb" describing the interview, and 4-6 dimensions — the core grading criteria for THIS interview (key is a lowercase slug, label is human-readable in ${language}).
 - On the ready turn, response_text should warmly hand off ("Here's your set — start when you're ready."), and suggestions_enabled should be false.
 - Output ONLY the JSON object. No markdown, no commentary.`;
 
@@ -132,6 +134,7 @@ function normalizeTurn(raw: Partial<BuilderTurn>): BuilderTurn {
       role: str(summaryIn.role),
       category: str(summaryIn.category),
       difficulty: str(summaryIn.difficulty),
+      blurb: str(summaryIn.blurb),
       focus: strList(summaryIn.focus).slice(0, 6),
       minutes: clampNum(summaryIn.minutes, 0, 120),
       count: ready ? questions.length : clampNum(summaryIn.count, 0, 30),

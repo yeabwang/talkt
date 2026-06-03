@@ -13,6 +13,7 @@ interface BuilderSummary {
   role: string;
   category: string;
   difficulty: string;
+  blurb: string;
   focus: string[];
   minutes: number;
   count: number;
@@ -44,6 +45,7 @@ const EMPTY_SUMMARY: BuilderSummary = {
   role: "",
   category: "",
   difficulty: "",
+  blurb: "",
   focus: [],
   minutes: 0,
   count: 0,
@@ -150,7 +152,7 @@ export function BuilderScreen({
       role: summary.role || undefined,
       category: summary.category || "Custom",
       difficulty: summary.difficulty || "All levels",
-      blurb: "Generated from your brief in the builder.",
+      blurb: summary.blurb || "Generated from your brief in the builder.",
       minutes: summary.minutes || Math.max(15, qs.length * 3),
       focus: summary.focus,
       language,
@@ -189,7 +191,7 @@ export function BuilderScreen({
       voice: pickVoice(role),
       language,
       custom: true,
-      blurb: "Generated from your brief in the builder.",
+      blurb: summary.blurb || "Generated from your brief in the builder.",
       questions: qs,
       focus: summary.focus,
       dimensions: turn?.dimensions ?? [],
