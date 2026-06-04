@@ -3,7 +3,7 @@
 //     no local driver adapter.
 //   - everything else → direct Postgres (pooled TCP) via @prisma/adapter-pg.
 // Cached on globalThis in development so hot reload reuses one instance.
-import { PrismaClient } from "./generated/prisma/client";
+import { Prisma, PrismaClient } from "./generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 if (!process.env.DATABASE_URL) {
@@ -22,12 +22,38 @@ function createPrisma(): PrismaClient {
   return new PrismaClient({ adapter });
 }
 
+const expectedDelegates = Object.values(Prisma.ModelName).map((model) => model.charAt(0).toLowerCase() + model.slice(1));
+const clientSchemaSignature = expectedDelegates.join("|");
+
+function hasExpectedDelegates(client: PrismaClient): boolean {
+  return expectedDelegates.every((delegate) => delegate in client);
+}
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
+  prismaSchemaSignature: string | undefined;
 };
 
-export const prisma = globalForPrisma.prisma ?? createPrisma();
+function getPrisma(): PrismaClient {
+  let cached = globalForPrisma.prisma;
+
+  if (
+    process.env.NODE_ENV !== "production" &&
+    cached &&
+    (globalForPrisma.prismaSchemaSignature !== clientSchemaSignature || !hasExpectedDelegates(cached))
+  ) {
+    void cached.$disconnect().catch(() => undefined);
+    cached = undefined;
+    globalForPrisma.prisma = undefined;
+    globalForPrisma.prismaSchemaSignature = undefined;
+  }
+
+  return cached ?? createPrisma();
+}
+
+export const prisma = getPrisma();
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
+  globalForPrisma.prismaSchemaSignature = clientSchemaSignature;
 }

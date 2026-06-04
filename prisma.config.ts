@@ -10,6 +10,9 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    // CLI/migrate needs a DIRECT Postgres connection — the Accelerate proxy
+    // (DATABASE_URL) rejects the migration TLS handshake (P1011). Runtime
+    // (lib/prisma.ts) still uses DATABASE_URL.
+    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
   },
 });

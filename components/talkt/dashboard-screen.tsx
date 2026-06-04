@@ -23,7 +23,7 @@ export function DashboardScreen({
   const firstName = user.name.split(" ")[0] ?? user.name;
   const last = attempts[0];
   const lastInterview = last ? byId[last.interviewId] : undefined;
-  const avg = Math.round(attempts.reduce((sum, attempt) => sum + attempt.overall, 0) / attempts.length);
+  const avg = attempts.length ? Math.round(attempts.reduce((sum, attempt) => sum + attempt.overall, 0) / attempts.length) : 0;
   const trend = [...attempts].reverse().map((attempt) => attempt.overall);
   const rising = trend[trend.length - 1] >= trend[0];
   const recommend = byId.consult ?? allInterviews.find((interview) => interview.category === "Business");
@@ -79,12 +79,17 @@ export function DashboardScreen({
         <div style={{ padding: 30, borderLeft: "1px solid var(--border)", background: "var(--surface-2)", display: "flex", flexDirection: "column" }}>
           <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
             <span className="mono-label">Coach&apos;s note</span>
-            <Sparkline data={trend} />
+            {trend.length ? <Sparkline data={trend} /> : null}
           </div>
-          <p className="body" style={{ margin: 0, color: "var(--foreground)" }}>
-            You&apos;re averaging <strong style={{ fontWeight: 600 }}>{avg}</strong> across {attempts.length} sessions and {rising ? "trending up" : "holding steady"}. Communication is your strongest dimension -{" "}
-            <span style={{ color: "var(--muted-foreground)" }}>depth is where you lose points.</span>
-          </p>
+          {attempts.length ? (
+            <p className="body" style={{ margin: 0, color: "var(--foreground)" }}>
+              You&apos;re averaging <strong style={{ fontWeight: 600 }}>{avg}</strong> across {attempts.length} sessions and {rising ? "trending up" : "holding steady"}.
+            </p>
+          ) : (
+            <p className="body" style={{ margin: 0, color: "var(--muted-foreground)" }}>
+              Finish your first interview and your scores, trend, and a coaching note land here.
+            </p>
+          )}
           <div className="grow" />
           {recommend ? (
             <button
@@ -126,20 +131,29 @@ export function DashboardScreen({
       </div>
 
       <SectionHeader num="02" label="All sessions" right={<span className="mono" style={{ fontSize: 11, color: "var(--dimmed)" }}>{attempts.length} attempts</span>} />
-      <div style={{ borderTop: "1px solid var(--border)" }}>
-        {attempts.map((attempt) => (
-          <AttemptRow
-            key={attempt.id}
-            attempt={attempt}
-            interview={byId[attempt.interviewId]}
-            onOpen={() => navigate("results", { attemptId: attempt.id, interviewId: attempt.interviewId, fromHistory: true })}
-            onRetake={() => {
-              const interview = byId[attempt.interviewId];
-              if (interview) startInterview(interview);
-            }}
-          />
-        ))}
-      </div>
+      {attempts.length ? (
+        <div style={{ borderTop: "1px solid var(--border)" }}>
+          {attempts.map((attempt) => (
+            <AttemptRow
+              key={attempt.id}
+              attempt={attempt}
+              interview={byId[attempt.interviewId]}
+              onOpen={() => navigate("results", { attemptId: attempt.id, interviewId: attempt.interviewId, fromHistory: true })}
+              onRetake={() => {
+                const interview = byId[attempt.interviewId];
+                if (interview) startInterview(interview);
+              }}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="card rounded-lg" style={{ padding: 32, textAlign: "center", borderTop: "1px solid var(--border)" }}>
+          <Icon name="phone" size={22} className="muted" style={{ margin: "0 auto 10px" }} />
+          <p className="caption" style={{ margin: 0 }}>
+            No sessions yet. Start an interview to see it here.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

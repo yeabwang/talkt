@@ -3,9 +3,11 @@
 // parses, and retries with exponential backoff + jitter on transport/parse
 // failure. Server-only — never import from a client component.
 
-const API_KEY = process.env.LLM_API_KEY;
-const BASE_URL = (process.env.LLM_BASE_URL ?? "https://api.deepseek.com").replace(/\/$/, "");
-const MODEL = process.env.LLM_MODEL ?? "deepseek-chat";
+// Accept either the generic LLM_* names or the provider-specific DEEPSEEK_*
+// names used in .env.example — whichever is set.
+const API_KEY = process.env.LLM_API_KEY ?? process.env.DEEPSEEK_API_KEY;
+const BASE_URL = (process.env.LLM_BASE_URL ?? process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com").replace(/\/$/, "");
+const MODEL = process.env.LLM_MODEL ?? process.env.DEEPSEEK_MODEL ?? "deepseek-chat";
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -15,6 +17,7 @@ export interface ChatMessage {
 interface ChatJSONOptions {
   temperature?: number;
   maxRetries?: number;
+  maxTokens?: number;
 }
 
 /**
@@ -23,9 +26,9 @@ interface ChatJSONOptions {
  */
 export async function chatJSON<T = unknown>(
   messages: ChatMessage[],
-  { temperature = 0.7, maxRetries = 3 }: ChatJSONOptions = {},
+  { temperature = 0.7, maxRetries = 3, maxTokens }: ChatJSONOptions = {},
 ): Promise<T> {
-  if (!API_KEY) throw new Error("LLM_API_KEY is not set");
+  if (!API_KEY) throw new Error("LLM_API_KEY (or DEEPSEEK_API_KEY) is not set");
 
   let lastError: unknown;
 
@@ -41,6 +44,7 @@ export async function chatJSON<T = unknown>(
           model: MODEL,
           temperature,
           response_format: { type: "json_object" },
+          ...(maxTokens ? { max_tokens: maxTokens } : {}),
           messages,
         }),
       });
