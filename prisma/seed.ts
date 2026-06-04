@@ -32,7 +32,7 @@ async function main() {
       type: "template" as const,
       visibility: "public" as const,
       language: toLanguageCode("English"),
-      dimensions: [],
+      dimensions: t.dimensions,
       questions: t.questions,
       voiceConfig: { voiceId: t.voice },
       authorName: null, // null -> credited as "TalkT"

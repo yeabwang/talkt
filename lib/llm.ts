@@ -17,6 +17,7 @@ export interface ChatMessage {
 interface ChatJSONOptions {
   temperature?: number;
   maxRetries?: number;
+  maxTokens?: number;
 }
 
 /**
@@ -25,7 +26,7 @@ interface ChatJSONOptions {
  */
 export async function chatJSON<T = unknown>(
   messages: ChatMessage[],
-  { temperature = 0.7, maxRetries = 3 }: ChatJSONOptions = {},
+  { temperature = 0.7, maxRetries = 3, maxTokens }: ChatJSONOptions = {},
 ): Promise<T> {
   if (!API_KEY) throw new Error("LLM_API_KEY (or DEEPSEEK_API_KEY) is not set");
 
@@ -43,6 +44,7 @@ export async function chatJSON<T = unknown>(
           model: MODEL,
           temperature,
           response_format: { type: "json_object" },
+          ...(maxTokens ? { max_tokens: maxTokens } : {}),
           messages,
         }),
       });

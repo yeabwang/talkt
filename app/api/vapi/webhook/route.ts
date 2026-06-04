@@ -1,12 +1,13 @@
 // POST /api/vapi/webhook — Vapi server webhook (end-of-call-report only).
-// On a finished call: persist the full transcript to Blob, move the attempt to
-// `analyzing`, run DeepSeek analysis, store Feedback, flip to `ready`. Always
-// returns 200 so Vapi doesn't retry; failures flip the attempt to `failed`.
+// Server-side fallback to the client-triggered grade: resolves the attempt and
+// hands its transcript to the `grade-attempt` Trigger.dev task. The task is
+// idempotent (status-guarded), so if the browser already kicked off grading this
+// is a no-op. Always returns 200 so Vapi doesn't retry.
+import { tasks } from "@trigger.dev/sdk";
 import type { NextRequest } from "next/server";
 
-import { analyzeTranscript } from "@/lib/analysis";
-import { saveRawAnalysis, saveTranscript } from "@/lib/blob";
-import { findAttemptForWebhook, markAnalyzing, markFailed, storeFeedback } from "@/lib/db/attempts";
+import type { gradeAttempt } from "@/trigger/grade-attempt";
+import { findAttemptForWebhook } from "@/lib/db/attempts";
 
 const WEBHOOK_SECRET = process.env.VAPI_WEBHOOK_SECRET;
 
@@ -14,23 +15,19 @@ function str(v: unknown): string | null {
   return typeof v === "string" && v ? v : null;
 }
 
-/** Pull a usable transcript string from the many shapes Vapi may send. */
-function extractTranscript(message: Record<string, unknown>): { text: string; raw: unknown } {
+/** Normalize the many transcript shapes Vapi may send into {role, text} turns. */
+function extractTurns(message: Record<string, unknown>): { role: string; text: string }[] {
   const artifact = (message.artifact ?? {}) as Record<string, unknown>;
-  const text = str(message.transcript) ?? str(artifact.transcript);
-  if (text) return { text, raw: artifact.messages ?? message.messages ?? text };
-
   const messages = (Array.isArray(artifact.messages) ? artifact.messages : message.messages) as
     | { role?: string; message?: string; content?: string }[]
     | undefined;
   if (Array.isArray(messages)) {
-    const joined = messages
-      .map((m) => `${m.role ?? "?"}: ${m.message ?? m.content ?? ""}`.trim())
-      .filter(Boolean)
-      .join("\n");
-    return { text: joined, raw: messages };
+    return messages
+      .map((m) => ({ role: m.role === "user" ? "user" : "assistant", text: (m.message ?? m.content ?? "").trim() }))
+      .filter((t) => t.text);
   }
-  return { text: "", raw: message };
+  const text = str(message.transcript) ?? str(artifact.transcript);
+  return text ? [{ role: "assistant", text }] : [];
 }
 
 export async function POST(req: NextRequest) {
@@ -58,27 +55,17 @@ export async function POST(req: NextRequest) {
 
   const attempt = await findAttemptForWebhook(attemptId, vapiCallId);
   if (!attempt) return Response.json({ ok: true });
-  // Idempotent: ignore duplicate reports for an already-processed attempt.
+  // Idempotent: grading already done or in flight (likely the client beat us).
   if (attempt.status === "ready" || attempt.status === "analyzing") return Response.json({ ok: true });
 
-  const { text, raw } = extractTranscript(message);
-
-  try {
-    const transcriptUrl = await saveTranscript(attempt.id, raw);
-    await markAnalyzing(attempt.id, transcriptUrl);
-
-    if (!text) {
-      // Empty transcript (e.g. immediate hang-up) — nothing to score.
-      await markFailed(attempt.id);
-      return Response.json({ ok: true });
-    }
-
-    const result = await analyzeTranscript(attempt.interview, text);
-    const rawUrl = await saveRawAnalysis(attempt.id, result);
-    await storeFeedback(attempt.id, result, rawUrl);
-  } catch {
-    await markFailed(attempt.id);
-  }
+  const transcript = extractTurns(message);
+  // Same idempotency key as the client path — if the browser already triggered
+  // grading for this attempt, this collapses into that run (no double grade).
+  await tasks.trigger<typeof gradeAttempt>(
+    "grade-attempt",
+    { attemptId: attempt.id, transcript },
+    { idempotencyKey: `grade-${attempt.id}`, idempotencyKeyTTL: "1h" },
+  );
 
   return Response.json({ ok: true });
 }

@@ -3,10 +3,10 @@
 import * as React from "react";
 import { useClerk, useUser } from "@clerk/nextjs";
 
-import { fetchDirectory, fetchRecommended, type CallSession } from "@/components/talkt/api";
+import { fetchAttempts, fetchDirectory, fetchRecommended, type CallSession } from "@/components/talkt/api";
 import { AppShell, type TalkTRoute } from "@/components/talkt/app-shell";
 import { BuilderScreen } from "@/components/talkt/builder-screen";
-import { ATTEMPTS, type AppUser, type Interview } from "@/components/talkt/data";
+import { type AppUser, type Attempt, type Interview } from "@/components/talkt/data";
 import { DashboardScreen } from "@/components/talkt/dashboard-screen";
 import { LibraryScreen, InterviewDetailScreen } from "@/components/talkt/library-screen";
 import { LiveInterviewScreen } from "@/components/talkt/live-screen";
@@ -83,7 +83,8 @@ export function TalkTApp() {
   // The live, ranked directory from the API (the only source of templates now).
   const [directory, setDirectory] = React.useState<Interview[]>([]);
   const [recommended, setRecommended] = React.useState<Interview[]>([]);
-  const attempts = ATTEMPTS;
+  // The user's graded attempt history from the DB (Reports + dashboard).
+  const [attempts, setAttempts] = React.useState<Attempt[]>([]);
 
   // Profile (name + photo) comes from Clerk once loaded. A cached copy is only a
   // pre-Clerk fallback; delay reading it so hydration still starts from null.
@@ -157,6 +158,25 @@ export function TalkTApp() {
     };
   }, [isLoaded, clerkUser]);
 
+  // Load the user's graded history whenever they land on a screen that shows it
+  // (refetches after a just-finished grade once they navigate back).
+  React.useEffect(() => {
+    if (!isLoaded || !clerkUser) return;
+    if (route !== "dashboard" && route !== "reports") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const list = await fetchAttempts();
+        if (!cancelled) setAttempts(list);
+      } catch {
+        /* DB unreachable — history stays empty */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, clerkUser, route]);
+
   // Recommendations re-rank the directory (suitable interviews float to the top)
   // — not a separate section. Fall back to plain rank order until they load.
   const allInterviews = React.useMemo(() => {
@@ -218,7 +238,7 @@ export function TalkTApp() {
         user={user}
         session={session}
         camStream={camStream}
-        onEnd={(attemptId) => navigate("results", { interview: active, attemptId })}
+        onEnd={(attemptId, transcript) => navigate("results", { interview: active, attemptId, transcript })}
         onCancel={() => navigate("dashboard")}
       />
     );
@@ -247,16 +267,14 @@ export function TalkTApp() {
   } else if (route === "results") {
     const active = interview ?? allInterviews[0];
     const attemptId = params.attemptId as string | undefined;
-    const fromHistory = Boolean(params.fromHistory);
-    const attempt = fromHistory && attemptId ? attempts.find((item) => item.id === attemptId) : null;
+    const transcript = params.transcript as { role: string; text: string }[] | undefined;
     body = (
       <ResultsScreen
         interview={active}
-        attempt={attempt}
-        attemptId={fromHistory ? undefined : attemptId}
+        attemptId={attemptId}
+        transcript={transcript}
         navigate={navigate}
         startInterview={startInterview}
-        instant={fromHistory}
       />
     );
   }

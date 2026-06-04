@@ -1,32 +1,23 @@
-// Vercel Blob artifact storage. Bulky call artifacts (full transcript, raw
-// analysis output) live here, not in Postgres — the DB only keeps the blob URL.
+// Vercel Blob artifact storage. The raw analysis output (the full structured
+// feedback) is kept here as a private artifact; Postgres only stores its URL.
+// The call transcript is NOT persisted here — it lives in the grading task's run
+// payload (replayed on retry) and is discarded with the run.
 // Server-only (uses BLOB_READ_WRITE_TOKEN).
 import { put } from "@vercel/blob";
 
 const TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
 
 /**
- * Persist a call's full transcript as a JSON artifact and return its public URL.
- * Returns null when Blob isn't configured so the caller can degrade (analysis
- * can still run from the in-memory transcript) instead of failing the webhook.
+ * Persist the raw analysis payload as a private artifact and return its URL.
+ * Returns null when Blob isn't configured (the structured Feedback row is still
+ * the source of truth, so the grade isn't lost).
  */
-export async function saveTranscript(attemptId: string, transcript: unknown): Promise<string | null> {
-  if (!TOKEN) return null;
-  const blob = await put(
-    `transcripts/${attemptId}.json`,
-    JSON.stringify(transcript),
-    { access: "public", contentType: "application/json", token: TOKEN, allowOverwrite: true },
-  );
-  return blob.url;
-}
-
-/** Persist the raw analysis payload alongside the transcript. Returns null when unconfigured. */
 export async function saveRawAnalysis(attemptId: string, raw: unknown): Promise<string | null> {
   if (!TOKEN) return null;
   const blob = await put(
     `analysis/${attemptId}.json`,
     JSON.stringify(raw),
-    { access: "public", contentType: "application/json", token: TOKEN, allowOverwrite: true },
+    { access: "private", contentType: "application/json", token: TOKEN, allowOverwrite: true },
   );
   return blob.url;
 }

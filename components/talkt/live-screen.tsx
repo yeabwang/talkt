@@ -19,7 +19,7 @@ export function LiveInterviewScreen({
   user: AppUser;
   session: CallSession;
   camStream: MediaStream | null;
-  onEnd: (attemptId: string) => void;
+  onEnd: (attemptId: string, transcript: { role: string; text: string }[]) => void;
   onCancel: () => void;
 }) {
   const call = useVapiCall();
@@ -58,9 +58,15 @@ export function LiveInterviewScreen({
     return () => window.clearInterval(timer);
   }, [call.status]);
 
-  // Natural or user-initiated end -> hand the attempt to the results poller.
+  // Natural or user-initiated end -> hand the attempt + captured transcript to
+  // the results screen, which grades it in one call (no poll loop / webhook wait).
+  const turnsRef = React.useRef(call.turns);
+  turnsRef.current = call.turns;
   React.useEffect(() => {
-    if (call.status === "ended") onEnd(session.attemptId);
+    if (call.status === "ended") {
+      const transcript = turnsRef.current.map((t) => ({ role: t.role, text: t.text }));
+      onEnd(session.attemptId, transcript);
+    }
   }, [call.status, onEnd, session.attemptId]);
 
   const aiSpeaking = call.assistantSpeaking;

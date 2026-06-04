@@ -74,7 +74,12 @@ export async function analyzeTranscript(interview: Interview, transcript: string
     content: [
       "You are an expert interview coach. You receive a transcript of a spoken mock interview and return STRICT JSON feedback.",
       `Write all prose (summary, notes, critiques, model answers) in ${language}.`,
-      "Score on a 0-100 scale. Be specific and quote the candidate where possible.",
+      "Score on a 0-100 scale. Be specific and concrete.",
+      "Be concise — this is read quickly:",
+      "- summary: 2 sentences max.",
+      "- each dimension note: 1 sentence.",
+      "- exactly 3 strengths and 3 improvements; each text 1 sentence, evidence a short quote/paraphrase.",
+      "- per question: critique 1-2 sentences; modelAnswer 2-3 sentences (the shape of a strong answer, not an essay).",
       "",
       "Score exactly these dimensions (use the given keys):",
       dimList,
@@ -109,7 +114,9 @@ export async function analyzeTranscript(interview: Interview, transcript: string
       .join("\n"),
   };
 
-  const raw = await chatJSON<Record<string, unknown>>([system, user], { temperature: 0.4 });
+  // Lower temperature + a token cap keep the completion tight and fast — the
+  // output size (a critique + model answer per question) is what drives latency.
+  const raw = await chatJSON<Record<string, unknown>>([system, user], { temperature: 0.2, maxTokens: 3500 });
 
   // Normalize: never trust the model to return every key/shape.
   const dimScoresRaw = Array.isArray(raw.dimensionScores) ? raw.dimensionScores : [];

@@ -47,11 +47,28 @@ export async function findAttemptForWebhook(
   return { id: row.id, status: row.status, interview: toTemplateDTO(row.interview as InterviewRow) };
 }
 
-/** Move an attempt to `analyzing` and record the transcript artifact URL + end time. */
-export async function markAnalyzing(attemptId: string, transcriptBlobUrl: string | null): Promise<void> {
+/**
+ * Owner-scoped lookup for the client-triggered grade endpoint — same shape as
+ * findAttemptForWebhook but gated to the caller so a leaked id can't grade
+ * someone else's attempt. Returns null when not found or not theirs.
+ */
+export async function findOwnedAttempt(
+  attemptId: string,
+  userId: string,
+): Promise<{ id: string; status: string; interview: UiInterview } | null> {
+  const row = await prisma.attempt.findFirst({
+    where: { id: attemptId, userId },
+    select: { id: true, status: true, interview: { select: interviewRowSelect } },
+  });
+  if (!row) return null;
+  return { id: row.id, status: row.status, interview: toTemplateDTO(row.interview as InterviewRow) };
+}
+
+/** Move an attempt to `analyzing` and stamp the end time. */
+export async function markAnalyzing(attemptId: string): Promise<void> {
   await prisma.attempt.update({
     where: { id: attemptId },
-    data: { status: "analyzing", endedAt: new Date(), transcriptBlobUrl: transcriptBlobUrl ?? undefined },
+    data: { status: "analyzing", endedAt: new Date() },
   });
 }
 
@@ -61,38 +78,35 @@ export async function storeFeedback(
   result: AnalysisResult,
   rawBlobUrl: string | null,
 ): Promise<void> {
-  const dimensionScores: Record<string, number> = {};
-  for (const d of result.dimensionScores) dimensionScores[d.key] = d.score;
+  // Keep the per-dimension note alongside the score so the report can show why
+  // each dimension scored as it did (not just the number).
+  const dimensionScores: Record<string, { score: number; note: string }> = {};
+  for (const d of result.dimensionScores) dimensionScores[d.key] = { score: d.score, note: d.note };
   // Prisma Json columns accept plain serializable values, not interface-typed
   // arrays; round-trip to strip the nominal type.
   const perQuestion = JSON.parse(JSON.stringify(result.perQuestion)) as object[];
 
+  const data = {
+    overallScore: result.overallScore,
+    summary: result.summary,
+    dimensionScores,
+    strengths: result.strengths.map((s) => s.text),
+    improvements: result.improvements.map((s) => s.text),
+    perQuestion,
+    rawBlobUrl: rawBlobUrl ?? undefined,
+  };
+
   await prisma.$transaction([
     prisma.feedback.upsert({
       where: { attemptId },
-      create: {
-        attemptId,
-        overallScore: result.overallScore,
-        dimensionScores,
-        strengths: result.strengths.map((s) => s.text),
-        improvements: result.improvements.map((s) => s.text),
-        perQuestion,
-        rawBlobUrl: rawBlobUrl ?? undefined,
-      },
-      update: {
-        overallScore: result.overallScore,
-        dimensionScores,
-        strengths: result.strengths.map((s) => s.text),
-        improvements: result.improvements.map((s) => s.text),
-        perQuestion,
-        rawBlobUrl: rawBlobUrl ?? undefined,
-      },
+      create: { attemptId, ...data },
+      update: data,
     }),
     prisma.attempt.update({ where: { id: attemptId }, data: { status: "ready" } }),
   ]);
 }
 
-/** Flag an attempt as failed (analysis or transcript handling threw). */
+/** Flag an attempt as failed (analysis threw or transcript was empty). */
 export async function markFailed(attemptId: string): Promise<void> {
   await prisma.attempt.update({ where: { id: attemptId }, data: { status: "failed" } }).catch(() => {});
 }
@@ -117,6 +131,7 @@ export async function getAttemptStatus(attemptId: string, userId: string): Promi
       feedback: {
         select: {
           overallScore: true,
+          summary: true,
           dimensionScores: true,
           strengths: true,
           improvements: true,
@@ -129,7 +144,9 @@ export async function getAttemptStatus(attemptId: string, userId: string): Promi
   if (row.status !== "ready" || !row.feedback) return { status: row.status };
 
   const fb = row.feedback;
-  const dimScores = (fb.dimensionScores ?? {}) as Record<string, number>;
+  // dimensionScores is { [key]: { score, note } } going forward; tolerate the
+  // legacy { [key]: number } shape from rows written before that change.
+  const dimScores = (fb.dimensionScores ?? {}) as Record<string, number | { score?: number; note?: string }>;
   const perQuestion = (Array.isArray(fb.perQuestion) ? fb.perQuestion : []) as {
     question?: string;
     ratingScore?: number;
@@ -140,7 +157,12 @@ export async function getAttemptStatus(attemptId: string, userId: string): Promi
   return {
     status: "ready",
     overall: fb.overallScore,
-    dimensions: Object.entries(dimScores).map(([id, score]) => ({ id, score, note: "" })),
+    summary: fb.summary,
+    dimensions: Object.entries(dimScores).map(([id, v]) => ({
+      id,
+      score: typeof v === "number" ? v : v.score ?? 0,
+      note: typeof v === "number" ? "" : v.note ?? "",
+    })),
     strengths: fb.strengths.map((text) => ({ text, evidence: "" })),
     improvements: fb.improvements.map((text) => ({ text, evidence: "" })),
     perQuestion: perQuestion.map((p) => ({
@@ -150,6 +172,55 @@ export async function getAttemptStatus(attemptId: string, userId: string): Promi
       model: p.modelAnswer ?? "",
     })),
   };
+}
+
+/** A scored attempt in the user's history, shaped for the UI (data.ts Attempt). */
+export interface UserAttempt {
+  id: string;
+  interviewId: string;
+  title: string;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:MM
+  minutes: number;
+  overall: number;
+  voice: string;
+}
+
+/**
+ * The user's graded attempts (status `ready`), newest first — the source for the
+ * Reports list and dashboard history. Only scored attempts are returned.
+ */
+export async function listUserAttempts(userId: string): Promise<UserAttempt[]> {
+  const rows = await prisma.attempt.findMany({
+    where: { userId, status: "ready", feedback: { isNot: null } },
+    orderBy: { startedAt: "desc" },
+    select: {
+      id: true,
+      interviewId: true,
+      startedAt: true,
+      endedAt: true,
+      interview: { select: { title: true, minutes: true, voiceConfig: true } },
+      feedback: { select: { overallScore: true } },
+    },
+  });
+
+  return rows.map((r) => {
+    const started = r.startedAt;
+    const minutes = r.endedAt
+      ? Math.max(1, Math.round((r.endedAt.getTime() - started.getTime()) / 60000))
+      : r.interview.minutes ?? 0;
+    const vc = (r.interview.voiceConfig ?? {}) as { voiceId?: string };
+    return {
+      id: r.id,
+      interviewId: r.interviewId,
+      title: r.interview.title,
+      date: started.toISOString().slice(0, 10),
+      time: started.toISOString().slice(11, 16),
+      minutes,
+      overall: Math.round(r.feedback?.overallScore ?? 0),
+      voice: vc.voiceId ?? "adi",
+    };
+  });
 }
 
 /**

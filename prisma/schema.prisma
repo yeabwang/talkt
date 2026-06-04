@@ -139,7 +139,8 @@ model Feedback {
   attemptId       String   @unique
   attempt         Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   overallScore    Float
-  dimensionScores Json // scores keyed to Interview.dimensions: { [dimKey]: score }
+  summary         String   @default("")
+  dimensionScores Json // keyed to Interview.dimensions: { [dimKey]: { score, note } }
   strengths       String[]
   improvements    String[]
   perQuestion     Json // [{ questionId, ratingScore, modelAnswer, critique }]

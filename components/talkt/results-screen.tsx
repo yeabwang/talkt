@@ -1,18 +1,32 @@
 "use client";
 
 import * as React from "react";
+import { useRealtimeRun } from "@trigger.dev/react-hooks";
 
-import { fetchAttemptStatus } from "@/components/talkt/api";
-import { DIMENSIONS, buildFeedback, type Attempt, type Feedback, type FeedbackEvidence, type Interview, type QuestionFeedback } from "@/components/talkt/data";
+import { fetchAttemptStatus, gradeAttempt, type AttemptStatus } from "@/components/talkt/api";
+import { DIMENSIONS, type Attempt, type Feedback, type FeedbackEvidence, type Interview, type QuestionFeedback } from "@/components/talkt/data";
 import type { TalkTRoute } from "@/components/talkt/app-shell";
 import { Icon, ScoreBar, ScoreRing, SectionHeader, TalkTButton, scoreColorVar } from "@/components/talkt/primitives";
+import type { GradeStep, gradeAttempt as gradeAttemptTask } from "@/trigger/grade-attempt";
 
-const ANALYSIS_STEPS = [
-  "Transcript received from call",
-  "Scoring four dimensions",
-  "Pulling evidence from your answers",
-  "Drafting strengths and improvements",
-];
+// The progress steps shown while grading runs. Driven by the task's streamed
+// `step` metadata — no faked timers.
+const ANALYSIS_STEPS = ["Transcript received from call", "Scoring your interview", "Saving your report"];
+
+// The streamed step key → index of the step currently in progress. Steps before
+// it render as complete; "done" (or absent) means all complete.
+function stepToIndex(step: GradeStep | undefined): number {
+  switch (step) {
+    case "scoring":
+      return 1;
+    case "saving":
+      return 2;
+    case "done":
+      return ANALYSIS_STEPS.length;
+    default:
+      return 0; // "received" or not yet reported
+  }
+}
 
 // Score tier shown in place of a plain "ready" badge.
 function scoreAward(score: number): { label: string; color: string } {
@@ -22,28 +36,151 @@ function scoreAward(score: number): { label: string; color: string } {
   return { label: "Keep practicing", color: "var(--muted-foreground)" };
 }
 
+// Map the API's ready status payload to the UI Feedback shape.
+function toFeedback(status: AttemptStatus): Feedback {
+  return {
+    overall: status.overall ?? 0,
+    summary: status.summary ?? "",
+    dimensions: (status.dimensions ?? []).map((d) => ({ id: d.id, score: d.score, note: d.note })),
+    strengths: status.strengths ?? [],
+    improvements: status.improvements ?? [],
+    perQuestion: status.perQuestion ?? [],
+  };
+}
+
 export function ResultsScreen({
   interview,
-  attempt,
   attemptId,
+  transcript,
   navigate,
   startInterview,
-  instant,
 }: {
   interview: Interview;
-  attempt?: Attempt | null;
-  // Real DB attempt id for a just-finished call; when set, feedback is polled.
+  // Real DB attempt id. Just-finished call carries the captured transcript and is
+  // graded in one request; opening a past attempt (no transcript) fetches its
+  // stored feedback.
   attemptId?: string;
+  transcript?: { role: string; text: string }[];
   navigate: (route: TalkTRoute, params?: Record<string, unknown>) => void;
   startInterview: (interview: Interview) => void;
-  instant?: boolean;
 }) {
-  // History / preview path: synchronous mock feedback (DB-backed history isn't
-  // wired yet). Live path (attemptId set): poll until analysis is ready.
-  if (attemptId && !instant) {
+  if (attemptId) {
+    if (transcript) {
+      return <GradedResults interview={interview} attemptId={attemptId} transcript={transcript} navigate={navigate} startInterview={startInterview} />;
+    }
     return <LiveResults interview={interview} attemptId={attemptId} navigate={navigate} startInterview={startInterview} />;
   }
-  return <MockResults interview={interview} attempt={attempt} navigate={navigate} startInterview={startInterview} instant={instant} />;
+  // No attempt to show (stale/direct nav) — there is no mock report to render.
+  return <ScoringFailed interview={interview} navigate={navigate} startInterview={startInterview} />;
+}
+
+/**
+ * Kicks off grading for the just-finished attempt (durable Trigger.dev task) and
+ * streams its progress via Realtime — no inline analysis, no poll loop. When the
+ * run completes, the stored feedback is fetched and rendered.
+ */
+function GradedResults({
+  interview,
+  attemptId,
+  transcript,
+  navigate,
+  startInterview,
+}: {
+  interview: Interview;
+  attemptId: string;
+  transcript: { role: string; text: string }[];
+  navigate: (route: TalkTRoute, params?: Record<string, unknown>) => void;
+  startInterview: (interview: Interview) => void;
+}) {
+  const [run, setRun] = React.useState<{ runId: string; accessToken: string } | null>(null);
+  const [feedback, setFeedback] = React.useState<Feedback | null>(null);
+  const [failed, setFailed] = React.useState(false);
+  const firedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (firedRef.current) return; // StrictMode / re-render guard: trigger once.
+    firedRef.current = true;
+    let active = true;
+
+    // Aborted / immediate hang-up: no candidate speech to score. Don't spend a
+    // grading run — surface the failure state directly.
+    const candidateSpoke = transcript.some((t) => t.role === "user" && (t.text ?? "").trim().length > 1);
+    if (!candidateSpoke) {
+      setFailed(true);
+      return;
+    }
+
+    (async () => {
+      try {
+        const res = await gradeAttempt(attemptId, transcript);
+        if (!active) return;
+        if ("runId" in res) {
+          setRun({ runId: res.runId, accessToken: res.publicAccessToken });
+        } else {
+          // Already graded (idempotent) — pull the stored feedback.
+          const status = await fetchAttemptStatus(attemptId);
+          if (active) status.status === "ready" ? setFeedback(toFeedback(status)) : setFailed(true);
+        }
+      } catch {
+        if (active) setFailed(true);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [attemptId, transcript]);
+
+  if (failed) return <ScoringFailed interview={interview} navigate={navigate} startInterview={startInterview} />;
+  if (feedback) return <FeedbackReady interview={interview} attempt={null} feedback={feedback} navigate={navigate} startInterview={startInterview} />;
+  if (run) {
+    return (
+      <RealtimeGrade
+        runId={run.runId}
+        accessToken={run.accessToken}
+        attemptId={attemptId}
+        onReady={setFeedback}
+        onFailed={() => setFailed(true)}
+      />
+    );
+  }
+  return <Analyzing />; // trigger request in flight
+}
+
+/** Subscribes to the grading run and renders streamed progress until it ends. */
+function RealtimeGrade({
+  runId,
+  accessToken,
+  attemptId,
+  onReady,
+  onFailed,
+}: {
+  runId: string;
+  accessToken: string;
+  attemptId: string;
+  onReady: (feedback: Feedback) => void;
+  onFailed: () => void;
+}) {
+  const { run, error } = useRealtimeRun<typeof gradeAttemptTask>(runId, {
+    accessToken,
+    onComplete: (completed, err) => {
+      if (err || completed.status !== "COMPLETED") {
+        onFailed();
+        return;
+      }
+      // Run finished — the task has stored the feedback; fetch and render it.
+      fetchAttemptStatus(attemptId)
+        .then((status) => (status.status === "ready" ? onReady(toFeedback(status)) : onFailed()))
+        .catch(onFailed);
+    },
+  });
+
+  React.useEffect(() => {
+    if (error) onFailed();
+  }, [error, onFailed]);
+
+  const step = run?.metadata?.step as GradeStep | undefined;
+  return <Analyzing currentStep={stepToIndex(step)} />;
 }
 
 /** Polls the attempt status endpoint until analysis is ready, then renders feedback. */
@@ -75,14 +212,7 @@ function LiveResults({
         const status = await fetchAttemptStatus(attemptId);
         if (!active) return;
         if (status.status === "ready") {
-          setFeedback({
-            overall: status.overall ?? 0,
-            summary: status.summary ?? "",
-            dimensions: (status.dimensions ?? []).map((d) => ({ id: d.id, score: d.score, note: d.note })),
-            strengths: status.strengths ?? [],
-            improvements: status.improvements ?? [],
-            perQuestion: status.perQuestion ?? [],
-          });
+          setFeedback(toFeedback(status));
           return;
         }
         if (status.status === "failed") {
@@ -107,72 +237,48 @@ function LiveResults({
     };
   }, [attemptId]);
 
-  if (failed) {
-    return (
-      <div className="bg-grid relative" style={{ minHeight: "calc(100vh - var(--header-h))", display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
-        <div className="relative text-center" style={{ maxWidth: 420 }}>
-          <Icon name="trending-up" size={26} className="muted" />
-          <h2 className="h2" style={{ margin: "16px 0 8px" }}>
-            We couldn&apos;t score this attempt
-          </h2>
-          <p className="caption" style={{ marginBottom: 22 }}>
-            The call was too short to analyze, or analysis failed. Try the interview again.
-          </p>
-          <div className="flex items-center justify-center gap-3">
-            <TalkTButton variant="secondary" icon="arrow-left" onClick={() => navigate("dashboard")}>
-              Back to dashboard
-            </TalkTButton>
-            <TalkTButton variant="primary" icon="repeat" onClick={() => startInterview(interview)}>
-              Retake
-            </TalkTButton>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  if (failed) return <ScoringFailed interview={interview} navigate={navigate} startInterview={startInterview} />;
   if (!feedback) return <Analyzing />;
   return <FeedbackReady interview={interview} attempt={null} feedback={feedback} navigate={navigate} startInterview={startInterview} />;
 }
 
-/** Mock/preview feedback (history opens, instant preview). */
-function MockResults({
+/** Shared "couldn't score this attempt" terminal state. */
+function ScoringFailed({
   interview,
-  attempt,
   navigate,
   startInterview,
-  instant,
 }: {
   interview: Interview;
-  attempt?: Attempt | null;
   navigate: (route: TalkTRoute, params?: Record<string, unknown>) => void;
   startInterview: (interview: Interview) => void;
-  instant?: boolean;
 }) {
-  const [state, setState] = React.useState<"analyzing" | "ready">(instant ? "ready" : "analyzing");
-  const feedback = React.useMemo(() => {
-    const built = buildFeedback(interview);
-    return attempt ? { ...built, overall: attempt.overall } : built;
-  }, [interview, attempt]);
-
-  if (state === "analyzing") return <Analyzing onReady={() => setState("ready")} />;
-  return <FeedbackReady interview={interview} attempt={attempt} feedback={feedback} navigate={navigate} startInterview={startInterview} />;
+  return (
+    <div className="bg-grid relative" style={{ minHeight: "calc(100vh - var(--header-h))", display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
+      <div className="relative text-center" style={{ maxWidth: 420 }}>
+        <Icon name="trending-up" size={26} className="muted" />
+        <h2 className="h2" style={{ margin: "16px 0 8px" }}>
+          We couldn&apos;t score this attempt
+        </h2>
+        <p className="caption" style={{ marginBottom: 22 }}>
+          The call was too short to analyze, or analysis failed. Try the interview again.
+        </p>
+        <div className="flex items-center justify-center gap-3">
+          <TalkTButton variant="secondary" icon="arrow-left" onClick={() => navigate("dashboard")}>
+            Back to dashboard
+          </TalkTButton>
+          <TalkTButton variant="primary" icon="repeat" onClick={() => startInterview(interview)}>
+            Retake
+          </TalkTButton>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-function Analyzing({ onReady }: { onReady?: () => void }) {
-  const [done, setDone] = React.useState(0);
-
-  React.useEffect(() => {
-    if (done >= ANALYSIS_STEPS.length) {
-      // Live path (no onReady): hold on the last step until feedback arrives.
-      if (!onReady) return;
-      const timer = window.setTimeout(onReady, 650);
-      return () => window.clearTimeout(timer);
-    }
-    const timer = window.setTimeout(() => setDone((value) => value + 1), 720 + done * 120);
-    return () => window.clearTimeout(timer);
-  }, [done, onReady]);
-
+// Live grading progress. `currentStep` is the step in progress (streamed from the
+// task); steps before it are complete, the rest pending. Defaults to the first
+// step for the no-stream fallback (opening a stored attempt).
+function Analyzing({ currentStep = 0 }: { currentStep?: number }) {
   return (
     <div className="bg-grid relative" style={{ minHeight: "calc(100vh - var(--header-h))", display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
       <div className="vignette" />
@@ -187,26 +293,26 @@ function Analyzing({ onReady }: { onReady?: () => void }) {
           Scoring your interview
         </h2>
         <p className="caption" style={{ marginBottom: 32 }}>
-          Server-side analysis. This usually takes a few seconds.
+          You can leave — we&apos;ll notify you when your report is ready.
         </p>
 
         <div className="card rounded-lg" style={{ padding: 6, textAlign: "left" }}>
-          {ANALYSIS_STEPS.map((step, index) => (
-            <div key={step} className="flex items-center gap-3" style={{ padding: "12px 14px", borderBottom: index < ANALYSIS_STEPS.length - 1 ? "1px solid var(--border)" : "none", opacity: index <= done ? 1 : 0.4, transition: "opacity var(--dur-base)" }}>
-              {index < done ? (
-                <Icon name="check" size={16} style={{ color: "var(--success)" }} />
-              ) : index === done ? (
-                <Icon name="loader" size={16} className="spin muted" />
-              ) : (
-                <span style={{ width: 16, height: 16, border: "1px solid var(--border)", borderRadius: "50%", display: "inline-block" }} />
-              )}
-              <span style={{ fontSize: 13.5, color: index <= done ? "var(--foreground)" : "var(--muted-foreground)" }}>{step}</span>
-            </div>
-          ))}
+          {ANALYSIS_STEPS.map((step, index) => {
+            const reached = index <= currentStep;
+            return (
+              <div key={step} className="flex items-center gap-3" style={{ padding: "12px 14px", borderBottom: index < ANALYSIS_STEPS.length - 1 ? "1px solid var(--border)" : "none", opacity: reached ? 1 : 0.4, transition: "opacity var(--dur-base)" }}>
+                {index < currentStep ? (
+                  <Icon name="check" size={16} style={{ color: "var(--success)" }} />
+                ) : index === currentStep ? (
+                  <Icon name="loader" size={16} className="spin muted" />
+                ) : (
+                  <span style={{ width: 16, height: 16, border: "1px solid var(--border)", borderRadius: "50%", display: "inline-block" }} />
+                )}
+                <span style={{ fontSize: 13.5, color: reached ? "var(--foreground)" : "var(--muted-foreground)" }}>{step}</span>
+              </div>
+            );
+          })}
         </div>
-        <p className="mono" style={{ marginTop: 18, fontSize: 11, color: "var(--dimmed)" }}>
-          Robust parsing · retries on partial responses
-        </p>
       </div>
     </div>
   );

@@ -3,7 +3,7 @@
 // Client-side fetch helpers for the template directory APIs. Server logic lives
 // in app/api/* + lib/db/*; these just shape requests and surface errors.
 
-import type { Interview } from "@/components/talkt/data";
+import type { Attempt, Interview } from "@/components/talkt/data";
 
 async function asError(res: Response): Promise<never> {
   const data = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -16,6 +16,14 @@ export async function fetchDirectory(): Promise<Interview[]> {
   if (!res.ok) return asError(res);
   const data = (await res.json()) as { interviews: Interview[] };
   return data.interviews;
+}
+
+/** Fetch the signed-in user's graded attempt history (newest first). */
+export async function fetchAttempts(): Promise<Attempt[]> {
+  const res = await fetch("/api/attempts", { headers: { Accept: "application/json" } });
+  if (!res.ok) return asError(res);
+  const data = (await res.json()) as { attempts: Attempt[] };
+  return data.attempts;
 }
 
 /** Fetch the personalized ("For you") order. Requires auth. */
@@ -98,6 +106,32 @@ export async function fetchAttemptStatus(attemptId: string): Promise<AttemptStat
   const res = await fetch(`/api/attempts/${attemptId}`, { headers: { Accept: "application/json" } });
   if (!res.ok) return asError(res);
   return (await res.json()) as AttemptStatus;
+}
+
+/**
+ * Result of kicking off grading: either it was already done (`ready`), or a
+ * Trigger.dev run was started and we get its id + a read-scoped token to stream
+ * progress via Realtime.
+ */
+export type GradeHandle = { status: "ready" } | { runId: string; publicAccessToken: string };
+
+/**
+ * Start grading from the transcript the browser captured during the call. The
+ * server hands it to a durable Trigger.dev task and returns immediately; the
+ * caller streams progress with the returned run id + token. Idempotent — safe to
+ * call once when the call ends.
+ */
+export async function gradeAttempt(
+  attemptId: string,
+  transcript: { role: string; text: string }[],
+): Promise<GradeHandle> {
+  const res = await fetch(`/api/attempts/${attemptId}/grade`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transcript }),
+  });
+  if (!res.ok) return asError(res);
+  return (await res.json()) as GradeHandle;
 }
 
 /** Publish an already-persisted interview to the public directory. */
