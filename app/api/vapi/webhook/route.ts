@@ -31,10 +31,14 @@ function extractTurns(message: Record<string, unknown>): { role: string; text: s
 }
 
 export async function POST(req: NextRequest) {
-  // Verify the shared secret Vapi echoes back from assistant.server.secret.
+  // Verify the shared secret Vapi echoes back from assistant.server.secret. In
+  // production a missing secret is a misconfiguration, not a bypass — fail closed.
   if (WEBHOOK_SECRET) {
     const provided = req.headers.get("x-vapi-secret");
     if (provided !== WEBHOOK_SECRET) return new Response("Unauthorized", { status: 401 });
+  } else if (process.env.NODE_ENV === "production") {
+    console.error("[vapi/webhook] VAPI_WEBHOOK_SECRET is not set — rejecting unverified webhook");
+    return new Response("Webhook not configured", { status: 503 });
   }
 
   let body: Record<string, unknown>;
