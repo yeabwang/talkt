@@ -7,6 +7,7 @@ import { fetchAttempts, fetchDirectory, fetchRecommended, type CallSession } fro
 import { AppShell, type TalkTRoute } from "@/components/talkt/app-shell";
 import { BuilderScreen } from "@/components/talkt/builder-screen";
 import { type AppUser, type Attempt, type Interview } from "@/components/talkt/data";
+import { type Loadable, idle, loading, loaded, isPending } from "@/lib/loadable";
 import { DashboardScreen } from "@/components/talkt/dashboard-screen";
 import { LibraryScreen, InterviewDetailScreen } from "@/components/talkt/library-screen";
 import { LiveInterviewScreen } from "@/components/talkt/live-screen";
@@ -85,6 +86,10 @@ export function TalkTApp() {
   const [recommended, setRecommended] = React.useState<Interview[]>([]);
   // The user's graded attempt history from the DB (Reports + dashboard).
   const [attempts, setAttempts] = React.useState<Attempt[]>([]);
+  // Load status so screens show skeletons (not empty states) until the first
+  // fetch settles.
+  const [directoryStatus, setDirectoryStatus] = React.useState<Loadable<true>>(idle());
+  const [attemptsStatus, setAttemptsStatus] = React.useState<Loadable<true>>(idle());
 
   // Profile (name + photo) comes from Clerk once loaded. A cached copy is only a
   // pre-Clerk fallback; delay reading it so hydration still starts from null.
@@ -140,6 +145,7 @@ export function TalkTApp() {
     if (!isLoaded || !clerkUser) return;
     let cancelled = false;
     void (async () => {
+      setDirectoryStatus(loading());
       try {
         const dir = await fetchDirectory();
         if (!cancelled && dir.length) setDirectory(dir);
@@ -152,6 +158,7 @@ export function TalkTApp() {
       } catch {
         /* recommendations are optional */
       }
+      if (!cancelled) setDirectoryStatus(loaded(true));
     })();
     return () => {
       cancelled = true;
@@ -165,12 +172,14 @@ export function TalkTApp() {
     if (route !== "dashboard" && route !== "reports") return;
     let cancelled = false;
     void (async () => {
+      setAttemptsStatus((s) => (s.status === "loaded" ? s : loading()));
       try {
         const list = await fetchAttempts();
         if (!cancelled) setAttempts(list);
       } catch {
         /* DB unreachable — history stays empty */
       }
+      if (!cancelled) setAttemptsStatus(loaded(true));
     })();
     return () => {
       cancelled = true;
@@ -186,6 +195,8 @@ export function TalkTApp() {
     return [...base, ...extras];
   }, [recommended, directory, sessionInterviews]);
   const findInterview = React.useCallback((id?: string) => allInterviews.find((interview) => interview.id === id), [allInterviews]);
+  const directoryLoading = isPending(directoryStatus) && allInterviews.length === 0;
+  const attemptsLoading = isPending(attemptsStatus) && attempts.length === 0;
   const toggleTheme = () => setTheme((current) => (current === "dark" ? "light" : "dark"));
 
   const navigate = React.useCallback((nextRoute: TalkTRoute, nextParams: Record<string, unknown> = {}) => {
@@ -247,19 +258,19 @@ export function TalkTApp() {
   let body: React.ReactNode = null;
 
   if (route === "dashboard") {
-    body = <DashboardScreen user={user} navigate={navigate} startInterview={startInterview} attempts={attempts} allInterviews={allInterviews} />;
+    body = <DashboardScreen user={user} navigate={navigate} startInterview={startInterview} attempts={attempts} allInterviews={allInterviews} loading={directoryLoading || attemptsLoading} />;
   } else if (route === "library") {
-    body = <LibraryScreen navigate={navigate} startInterview={startInterview} allInterviews={allInterviews} />;
+    body = <LibraryScreen navigate={navigate} startInterview={startInterview} allInterviews={allInterviews} loading={directoryLoading} />;
   } else if (route === "detail") {
     body = interview ? (
       <InterviewDetailScreen interview={interview} navigate={navigate} startInterview={startInterview} user={user} />
     ) : (
-      <LibraryScreen navigate={navigate} startInterview={startInterview} allInterviews={allInterviews} />
+      <LibraryScreen navigate={navigate} startInterview={startInterview} allInterviews={allInterviews} loading={directoryLoading} />
     );
   } else if (route === "builder") {
     body = <BuilderScreen navigate={navigate} startInterview={startInterview} user={user} />;
   } else if (route === "reports") {
-    body = <ReportsScreen navigate={navigate} startInterview={startInterview} attempts={attempts} allInterviews={allInterviews} />;
+    body = <ReportsScreen navigate={navigate} startInterview={startInterview} attempts={attempts} allInterviews={allInterviews} loading={attemptsLoading} />;
   } else if (route === "usage") {
     body = <UsageScreen />;
   } else if (route === "settings") {

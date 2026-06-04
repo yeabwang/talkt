@@ -4,6 +4,7 @@ import * as React from "react";
 
 import type { AppUser, Attempt, Interview } from "@/components/talkt/data";
 import { Icon, SectionHeader, TalkTButton, categoryIcon, scoreColorVar } from "@/components/talkt/primitives";
+import { CardGridSkeleton, HeroSkeleton } from "@/components/talkt/skeletons";
 import type { TalkTRoute } from "@/components/talkt/app-shell";
 
 export function DashboardScreen({
@@ -12,12 +13,14 @@ export function DashboardScreen({
   startInterview,
   attempts,
   allInterviews,
+  loading,
 }: {
   user: AppUser;
   navigate: (route: TalkTRoute, params?: Record<string, unknown>) => void;
   startInterview: (interview: Interview) => void;
   attempts: Attempt[];
   allInterviews: Interview[];
+  loading: boolean;
 }) {
   const byId = React.useMemo(() => Object.fromEntries(allInterviews.map((interview) => [interview.id, interview])), [allInterviews]);
   const firstName = user.name.split(" ")[0] ?? user.name;
@@ -27,6 +30,20 @@ export function DashboardScreen({
   const trend = [...attempts].reverse().map((attempt) => attempt.overall);
   const rising = trend[trend.length - 1] >= trend[0];
   const recommend = byId.consult ?? allInterviews.find((interview) => interview.category === "Business");
+
+  if (loading) {
+    return (
+      <div className="fade-up talkt-page">
+        <div style={{ marginBottom: 26 }}>
+          <span className="caption">Welcome back, {firstName}</span>
+        </div>
+        <div style={{ marginBottom: 44 }}>
+          <HeroSkeleton />
+        </div>
+        <CardGridSkeleton count={3} />
+      </div>
+    );
+  }
 
   return (
     <div className="fade-up talkt-page">

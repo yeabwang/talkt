@@ -4,6 +4,7 @@ import * as React from "react";
 
 import type { Attempt, Interview } from "@/components/talkt/data";
 import { Icon, SectionHeader, TalkTButton, categoryIcon, scoreColorVar } from "@/components/talkt/primitives";
+import { ReportsListSkeleton } from "@/components/talkt/skeletons";
 import type { TalkTRoute } from "@/components/talkt/app-shell";
 
 // Every interview a user has run, as openable feedback reports.
@@ -12,11 +13,13 @@ export function ReportsScreen({
   startInterview,
   attempts,
   allInterviews,
+  loading,
 }: {
   navigate: (route: TalkTRoute, params?: Record<string, unknown>) => void;
   startInterview: (interview: Interview) => void;
   attempts: Attempt[];
   allInterviews: Interview[];
+  loading: boolean;
 }) {
   const byId = React.useMemo(() => Object.fromEntries(allInterviews.map((interview) => [interview.id, interview])), [allInterviews]);
 
@@ -31,7 +34,9 @@ export function ReportsScreen({
         </p>
       </div>
 
-      {attempts.length ? (
+      {loading ? (
+        <ReportsListSkeleton rows={5} />
+      ) : attempts.length ? (
         <>
           <SectionHeader num="01" label="All reports" right={<span className="mono" style={{ fontSize: 11, color: "var(--dimmed)" }}>{attempts.length} reports</span>} />
           <div style={{ borderTop: "1px solid var(--border)" }}>

@@ -7,6 +7,7 @@ import { VOICES, interviewLanguage, type AppUser, type Interview } from "@/compo
 import type { TalkTRoute } from "@/components/talkt/app-shell";
 import { AgentAvatar, Icon, SectionHeader, TalkTButton, categoryIcon } from "@/components/talkt/primitives";
 import { PublishDialog } from "@/components/talkt/publish-dialog";
+import { CardGridSkeleton } from "@/components/talkt/skeletons";
 import { VoteControl } from "@/components/talkt/vote-control";
 
 interface LibraryFilters {
@@ -30,10 +31,12 @@ export function LibraryScreen({
   navigate,
   startInterview,
   allInterviews,
+  loading,
 }: {
   navigate: (route: TalkTRoute, params?: Record<string, unknown>) => void;
   startInterview: (interview: Interview) => void;
   allInterviews: Interview[];
+  loading: boolean;
 }) {
   const [query, setQuery] = React.useState("");
   const [filters, setFilters] = React.useState<LibraryFilters>(EMPTY_FILTERS);
@@ -115,17 +118,20 @@ export function LibraryScreen({
         </div>
       ) : null}
 
-      <div className="stagger talkt-library-grid" style={{ background: "var(--border)", border: "1px solid var(--border)" }}>
-        {filtered.map((interview) => (
-          <TemplateCard key={interview.id} interview={interview} onOpen={() => navigate("detail", { interviewId: interview.id })} onStart={() => startInterview(interview)} />
-        ))}
-        {filtered.length % 2 === 1 ? <div style={{ background: "var(--background)" }} /> : null}
-      </div>
-      {filtered.length === 0 ? (
+      {loading ? (
+        <CardGridSkeleton count={6} />
+      ) : filtered.length === 0 ? (
         <div className="caption" style={{ padding: 48, textAlign: "center" }}>
           No interviews match your filters.
         </div>
-      ) : null}
+      ) : (
+        <div className="stagger talkt-library-grid" style={{ background: "var(--border)", border: "1px solid var(--border)" }}>
+          {filtered.map((interview) => (
+            <TemplateCard key={interview.id} interview={interview} onOpen={() => navigate("detail", { interviewId: interview.id })} onStart={() => startInterview(interview)} />
+          ))}
+          {filtered.length % 2 === 1 ? <div style={{ background: "var(--background)" }} /> : null}
+        </div>
+      )}
 
       {filterOpen ? (
         <FilterPanel
