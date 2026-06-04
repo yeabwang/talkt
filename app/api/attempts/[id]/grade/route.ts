@@ -11,6 +11,7 @@ import type { NextRequest } from "next/server";
 
 import type { gradeAttempt } from "@/trigger/grade-attempt";
 import { findOwnedAttempt } from "@/lib/db/attempts";
+import { sanitizeTranscript } from "@/lib/transcript";
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { userId } = await auth();
@@ -23,9 +24,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (attempt.status === "ready") return Response.json({ status: "ready" });
 
   const body = (await req.json().catch(() => null)) as { transcript?: unknown } | null;
-  const transcript = Array.isArray(body?.transcript)
-    ? (body.transcript as { role: string; text: string }[])
-    : [];
+  const transcript = sanitizeTranscript(body?.transcript);
 
   // Idempotency key = attempt: a concurrent webhook trigger collapses into this
   // same run instead of grading twice.
