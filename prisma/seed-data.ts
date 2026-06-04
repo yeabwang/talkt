@@ -13,6 +13,9 @@ export interface SeedTemplate {
   minutes: number;
   voice: string;
   questions: string[];
+  // Role-specific grading criteria the grader scores against. 4 per role so the
+  // report reflects the actual job, not the generic communication/structure set.
+  dimensions: { key: string; label: string }[];
 }
 
 export const SEED_TEMPLATES: SeedTemplate[] = [
@@ -36,6 +39,12 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
       "Design the data flow for a collaborative cursor feature.",
       "What's your approach to testing a complex form?",
     ],
+    dimensions: [
+      { key: "system_design", label: "System design" },
+      { key: "code_quality", label: "Code quality" },
+      { key: "performance", label: "Performance" },
+      { key: "communication", label: "Communication" },
+    ],
   },
   {
     id: "pm-sense",
@@ -56,6 +65,12 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
       "How do you say no to a senior stakeholder's pet feature?",
       "Describe a decision you made with incomplete data.",
     ],
+    dimensions: [
+      { key: "product_sense", label: "Product sense" },
+      { key: "prioritization", label: "Prioritization" },
+      { key: "metrics", label: "Metrics & data" },
+      { key: "communication", label: "Communication" },
+    ],
   },
   {
     id: "behavioral",
@@ -74,6 +89,12 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
       "Tell me about a time you received hard feedback.",
       "How do you handle a teammate who isn't pulling their weight?",
       "What's a risk you took that didn't pay off?",
+    ],
+    dimensions: [
+      { key: "ownership", label: "Ownership" },
+      { key: "self_awareness", label: "Self-awareness" },
+      { key: "influence", label: "Influence" },
+      { key: "communication", label: "Communication" },
     ],
   },
   {
@@ -95,6 +116,12 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
       "How do you stay composed during a code?",
       "What would you do if you saw a colleague cut a corner on hygiene?",
     ],
+    dimensions: [
+      { key: "clinical_judgment", label: "Clinical judgment" },
+      { key: "patient_communication", label: "Patient communication" },
+      { key: "prioritization", label: "Prioritization" },
+      { key: "ethics", label: "Ethics & safety" },
+    ],
   },
   {
     id: "consult",
@@ -112,6 +139,12 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
       "Estimate the number of electric scooters needed for a mid-size city.",
       "A client wants to enter the meal-kit market. Walk me through your approach.",
       "Synthesize: what's your recommendation and the top risk?",
+    ],
+    dimensions: [
+      { key: "structure", label: "Structuring" },
+      { key: "quantitative", label: "Quantitative reasoning" },
+      { key: "business_insight", label: "Business insight" },
+      { key: "communication", label: "Communication" },
     ],
   },
   {
@@ -132,6 +165,12 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
       "Tell me about the largest deal you closed and what almost killed it.",
       "How do you forecast a quarter you're behind on?",
     ],
+    dimensions: [
+      { key: "discovery", label: "Discovery" },
+      { key: "objection_handling", label: "Objection handling" },
+      { key: "persuasion", label: "Persuasion" },
+      { key: "process", label: "Process & forecasting" },
+    ],
   },
   {
     id: "ux",
@@ -150,6 +189,12 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
       "Critique the onboarding of an app you used recently.",
       "How do you know when a design is done?",
       "How do you balance consistency with the right exception?",
+    ],
+    dimensions: [
+      { key: "process", label: "Design process" },
+      { key: "craft", label: "Craft" },
+      { key: "critique", label: "Critique" },
+      { key: "communication", label: "Communication" },
     ],
   },
   {
@@ -170,6 +215,12 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
       "Walk me through handling severe class imbalance.",
       "How do you detect and explain data leakage?",
       "A stakeholder wants a number you can't get cleanly. What do you do?",
+    ],
+    dimensions: [
+      { key: "statistical_rigor", label: "Statistical rigor" },
+      { key: "ml_judgment", label: "ML judgment" },
+      { key: "experiment_design", label: "Experiment design" },
+      { key: "communication", label: "Communication" },
     ],
   },
 ];

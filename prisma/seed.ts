@@ -16,6 +16,7 @@ import { toLanguageCode } from "../lib/language";
 
 async function main() {
   const { prisma } = await import("../lib/prisma");
+  const { ensureVoiceAgents } = await import("../lib/db/voice-agents");
   const now = new Date();
 
   for (const t of SEED_TEMPLATES) {
@@ -31,7 +32,7 @@ async function main() {
       type: "template" as const,
       visibility: "public" as const,
       language: toLanguageCode("English"),
-      dimensions: [],
+      dimensions: t.dimensions,
       questions: t.questions,
       voiceConfig: { voiceId: t.voice },
       authorName: null, // null -> credited as "TalkT"
@@ -46,7 +47,9 @@ async function main() {
     });
   }
 
-  console.log(`Seeded ${SEED_TEMPLATES.length} TalkT templates.`);
+  await ensureVoiceAgents();
+
+  console.log(`Seeded ${SEED_TEMPLATES.length} TalkT templates and ensured default voice agents.`);
   await prisma.$disconnect();
 }
 

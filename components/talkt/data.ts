@@ -155,50 +155,5 @@ export const USAGE: UsageSummary = {
   ],
 };
 
-export const ATTEMPTS: Attempt[] = [
-  { id: "a1", interviewId: "behavioral", title: "Behavioral & leadership", date: "2026-06-01", time: "14:32", minutes: 17, overall: 82, voice: "adi" },
-  { id: "a2", interviewId: "fe-react", title: "Frontend engineer", date: "2026-05-29", time: "09:14", minutes: 24, overall: 74, voice: "kai" },
-  { id: "a3", interviewId: "pm-sense", title: "Product manager", date: "2026-05-27", time: "18:05", minutes: 21, overall: 68, voice: "ren" },
-  { id: "a4", interviewId: "fe-react", title: "Frontend engineer", date: "2026-05-22", time: "11:40", minutes: 23, overall: 61, voice: "kai" },
-  { id: "a5", interviewId: "consult", title: "Consulting case", date: "2026-05-18", time: "20:11", minutes: 27, overall: 79, voice: "kai" },
-];
-
-export function buildFeedback(interview: Interview): Feedback {
-  return {
-    overall: 78,
-    summary:
-      "Strong, well-paced answers with clear structure. You lose points when you reach for a generic framework instead of a specific story - the interviewer can hear the difference. Tightening your openings and naming concrete numbers would move you from good to memorable.",
-    dimensions: [
-      { id: "communication", score: 84, note: 'Clear and concise. Almost no filler. Signposting ("three things") landed well.' },
-      { id: "structure", score: 80, note: "Good frameworks, but two answers buried the conclusion at the end instead of leading with it." },
-      { id: "depth", score: 71, note: "Solid, though a few answers stayed at the level of principle without a concrete example." },
-      { id: "confidence", score: 77, note: "Steady pace. One recovery after a stumble was handled gracefully; one fade-out at the end of an answer." },
-    ],
-    strengths: [
-      { text: "Led most answers with a one-line thesis before the detail - easy to follow.", evidence: '"There were three problems, and the database was the real one."' },
-      { text: "Quantified impact without prompting.", evidence: '"Cut p95 latency from 1.4s to 230ms."' },
-      { text: "Recovered cleanly when you lost the thread mid-answer instead of trailing off.", evidence: '"Let me restart that - the cleaner version is..."' },
-    ],
-    improvements: [
-      { text: "Two answers used a textbook framework where a specific story would land harder.", evidence: 'Q4 - opened with "there are four types of..." instead of what you actually did.' },
-      { text: "You tend to end answers softly. Close with the outcome, not a qualifier.", evidence: '"...but it kind of depends." Land it.' },
-      { text: "Watch the pace when you're confident - two answers sped up and clipped detail.", evidence: "Q2 ran 40s; the interviewer wanted the tradeoff you skipped." },
-    ],
-    perQuestion: interview.questions.map((q, index) => {
-      const ratings = [82, 74, 68, 88, 60, 79, 71, 76];
-      const rating = ratings[index % ratings.length];
-      return {
-        q,
-        rating,
-        critique:
-          rating >= 80
-            ? "Tight and specific. You led with the answer and backed it with a concrete example - exactly the shape an interviewer wants."
-            : rating >= 70
-              ? "Good substance, but the structure wandered. Lead with your conclusion, then give the two reasons that matter most."
-              : "You stayed at the level of principle. Anchor this in one real situation - what you did, the number, and what you'd change.",
-        model:
-          "Open with a one-line answer. Give the situation in a sentence, the specific action you took, and the measurable result. Close by naming the tradeoff you accepted - that signals seniority.",
-      };
-    }),
-  };
-}
+// Real attempt history + feedback come from the DB once wired; no mock seed.
+export const ATTEMPTS: Attempt[] = [];
