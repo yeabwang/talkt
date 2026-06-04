@@ -6,6 +6,7 @@ import { cachedDirectoryRows, revalidateDirectory } from "@/lib/db/directory-cac
 import { prisma } from "@/lib/prisma";
 import { interviewRowSelect, toTemplateDTO, type InterviewRow, type ViewerContext } from "@/lib/dto";
 import { toLanguageCode } from "@/lib/language";
+import { paginateById, type Page } from "@/lib/pagination";
 import { rankScore } from "@/lib/ranking";
 
 /** Fetch the caller's votes for a set of interviews -> { interviewId: 1 | -1 }. */
@@ -34,6 +35,30 @@ export async function listDirectory(viewerId: string | null): Promise<UiIntervie
       mine: viewerId != null && row.ownerId === viewerId,
     }),
   );
+}
+
+/**
+ * A cursor-paginated slice of the directory. The cached rows are already bounded
+ * (DIRECTORY_MAX_ROWS) and rank-ordered, so we page over them in memory and only
+ * resolve the per-viewer vote overlay for the items on the returned page. The
+ * default limit covers the whole bounded set, so a single call still returns the
+ * full directory (the client filters/searches client-side); pass `limit`/`cursor`
+ * to page for large-catalog or external consumers.
+ */
+export async function listDirectoryPage(
+  viewerId: string | null,
+  opts: { limit: number; cursor: string | null },
+): Promise<Page<UiInterview>> {
+  const rows = await cachedDirectoryRows();
+  const page = paginateById(rows, opts.cursor, opts.limit);
+  const myVotes = await votesByViewer(viewerId, page.items.map((r) => r.id));
+  const items = page.items.map((row) =>
+    toTemplateDTO(row, {
+      myVote: myVotes.get(row.id) ?? 0,
+      mine: viewerId != null && row.ownerId === viewerId,
+    }),
+  );
+  return { items, nextCursor: page.nextCursor };
 }
 
 /**

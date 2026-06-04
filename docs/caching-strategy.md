@@ -22,7 +22,14 @@ Defined in `lib/db/directory-cache.ts`.
 | Key | `["directory-rows"]` |
 | Tag | `"directory"` (`DIRECTORY_TAG`) |
 | TTL | `DIRECTORY_TTL_SECONDS = 60` seconds |
-| Payload | Public, non-flagged interview rows, rank-ordered (`rankScore desc, createdAt desc`). **No per-viewer data.** |
+| Payload | Public, non-flagged interview rows, rank-ordered (`rankScore desc, createdAt desc`), **capped at `DIRECTORY_MAX_ROWS = 200`**. **No per-viewer data.** |
+
+The cap bounds the cached read, the response payload, and client memory regardless
+of table growth. Callers page within this bounded set via `listDirectoryPage`
+(`lib/db/interviews.ts`) + the pure `paginateById`/`clampLimit` helpers
+(`lib/pagination.ts`); `GET /api/templates` exposes `?limit=&cursor=` and returns
+`{ interviews, nextCursor }`. The default limit returns the whole bounded set so
+the client retains instant client-side filtering/search.
 
 The cached function `cachedDirectoryRows()` wraps the `prisma.interview.findMany`
 that previously ran for **every** viewer on **every** directory load. The row set

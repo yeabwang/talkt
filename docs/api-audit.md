@@ -13,9 +13,11 @@
 - **No N+1 patterns remain.** The only fan-out risk — per-interview vote lookups
   on the directory — is batched through `votesByViewer` (single `groupBy` over all
   ids), in both `listDirectory` and the single-interview read.
-- **No pagination added.** The public directory is small and fully ranked, so it
-  is returned whole. Flag pagination as a follow-up if the directory grows beyond
-  a few hundred rows.
+- **Directory is bounded + cursor-paginated.** The cached row read is capped at
+  `DIRECTORY_MAX_ROWS = 200` (top-N by rank), bounding the DB read, payload, and
+  client memory. `GET /api/templates` accepts `?limit=&cursor=` for true cursor
+  pagination; the default limit returns the whole bounded set in one call so the
+  client keeps instant client-side filtering/search.
 - **All reads select only required fields** via the `interviewRowSelect` /
   attempt selects in the `lib/db/*` repository layer and the `lib/dto.ts` privacy
   seam.
@@ -34,7 +36,7 @@
 | Class | Read |
 | Problems | None remaining. Previously read on every load alongside `/recommended` (duplicate full directory read). |
 | Duplication | Overlaps `/recommended`, which returns the same rows re-ranked. Resolved in Phase B: this is the fallback, not the primary path. |
-| Needs | **Cache** — done (Phase C): row read served from `cachedDirectoryRows` (`unstable_cache`, tag `directory`, 60s). Per-viewer votes stay live. |
+| Needs | **Cache** — done (Phase C): row read served from `cachedDirectoryRows` (`unstable_cache`, tag `directory`, 60s). Per-viewer votes stay live. **Paginate** — done: bounded to `DIRECTORY_MAX_ROWS = 200`; accepts `?limit=&cursor=` (`listDirectoryPage` + `lib/pagination.ts`), returns `{ interviews, nextCursor }`. Default limit returns the whole bounded set (back-compat). |
 | Impact | High read frequency. Caching removes a repeated `findMany` for every viewer; Phase B removes the duplicate fetch in the common path. |
 
 ## `GET /api/templates/recommended`
@@ -173,7 +175,10 @@
 
 ## Follow-ups
 
-- **Pagination** for the directory if it grows beyond a few hundred public rows.
+- **Server-side filtered pagination** — the cursor pagination + 200-row cap bound
+  the result today, and the client filters the bounded set in memory. If the
+  catalog must grow past the cap *and* stay fully filterable, move filtering/search
+  server-side (indexed `where` + cursor) so paging and filtering compose.
 - **Shared store (Redis)** for the rate limiter and directory cache — both are
   per-process and need a shared backend for multi-instance deployments (see
   `docs/caching-strategy.md`).

@@ -10,14 +10,21 @@ import { interviewRowSelect, type InterviewRow } from "@/lib/dto";
 
 export const DIRECTORY_TAG = "directory";
 export const DIRECTORY_TTL_SECONDS = 60;
+/** Hard cap on directory rows read/served. The directory is rank-ordered, so this
+ *  keeps the top-N most relevant interviews and bounds the DB read, response
+ *  payload, and client memory no matter how large the table grows. Callers page
+ *  within this bounded set (see lib/pagination.ts). */
+export const DIRECTORY_MAX_ROWS = 200;
 
-/** Cached read of the public directory rows (no per-viewer data). */
+/** Cached read of the public directory rows (no per-viewer data), bounded to the
+ *  top DIRECTORY_MAX_ROWS by rank. */
 export const cachedDirectoryRows = unstable_cache(
   async (): Promise<InterviewRow[]> => {
     const rows = await prisma.interview.findMany({
       where: { visibility: "public", flagged: false },
       select: interviewRowSelect,
       orderBy: [{ rankScore: "desc" }, { createdAt: "desc" }],
+      take: DIRECTORY_MAX_ROWS,
     });
     return rows as InterviewRow[];
   },
