@@ -64,6 +64,11 @@ function LiveResults({
   React.useEffect(() => {
     let active = true;
     let timer: number | undefined;
+    let attempts = 0;
+    // ~3 min ceiling (60 × 3s). End-of-call report + LLM analysis lands well
+    // within this; if it doesn't (e.g. webhook never reached us), stop polling
+    // and surface the failure instead of looping forever.
+    const MAX_ATTEMPTS = 60;
 
     const poll = async () => {
       try {
@@ -86,6 +91,11 @@ function LiveResults({
         }
       } catch {
         /* transient — keep polling */
+      }
+      attempts += 1;
+      if (attempts >= MAX_ATTEMPTS) {
+        if (active) setFailed(true);
+        return;
       }
       timer = window.setTimeout(poll, 3000);
     };
