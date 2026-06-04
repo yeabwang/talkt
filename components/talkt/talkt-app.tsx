@@ -146,17 +146,25 @@ export function TalkTApp() {
     let cancelled = false;
     void (async () => {
       setDirectoryStatus(loading());
-      try {
-        const dir = await fetchDirectory();
-        if (!cancelled && dir.length) setDirectory(dir);
-      } catch {
-        /* DB unreachable — directory stays empty */
-      }
+      // Recommended already returns the full directory, re-ranked for this user.
+      // Use it as the primary source; only fall back to the plain directory when
+      // it fails or is empty — avoiding a second full directory read.
       try {
         const rec = await fetchRecommended();
-        if (!cancelled) setRecommended(rec);
+        if (!cancelled && rec.length) {
+          setRecommended(rec);
+          setDirectory(rec);
+          setDirectoryStatus(loaded(true));
+          return;
+        }
       } catch {
-        /* recommendations are optional */
+        /* fall through to the plain directory */
+      }
+      try {
+        const dir = await fetchDirectory();
+        if (!cancelled) setDirectory(dir);
+      } catch {
+        /* DB unreachable — directory stays empty */
       }
       if (!cancelled) setDirectoryStatus(loaded(true));
     })();
