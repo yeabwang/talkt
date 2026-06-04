@@ -11,10 +11,23 @@ import { ensureUser } from "@/lib/db/users";
 import { resolveVoiceAgent } from "@/lib/db/voice-agents";
 import { toLanguageCode } from "@/lib/language";
 import { buildAssistant } from "@/lib/vapi";
+import { createRateLimiter } from "@/lib/rate-limit";
+
+// Starting a call provisions a Vapi assistant + opens an Attempt row. 10/min/user
+// is well above real use and blocks rapid-fire abuse.
+const callLimiter = createRateLimiter({ limit: 10, windowMs: 60_000 });
 
 export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { userId } = await auth();
   if (!userId) return new Response("Unauthorized", { status: 401 });
+
+  const decision = callLimiter.check(userId);
+  if (!decision.allowed) {
+    return Response.json(
+      { error: "Too many requests. Please wait a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(decision.retryAfterMs / 1000)) } },
+    );
+  }
 
   const { id } = await ctx.params;
   await ensureUser();
