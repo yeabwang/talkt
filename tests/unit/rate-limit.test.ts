@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { createRateLimiter } from "../../lib/rate-limit";
 
 test("allows up to the limit within a window, then denies", () => {
-  let now = 1_000_000;
+  const now = 1_000_000;
   const limiter = createRateLimiter({ limit: 3, windowMs: 1000, now: () => now });
   assert.equal(limiter.check("user-a").allowed, true);
   assert.equal(limiter.check("user-a").allowed, true);
@@ -15,7 +15,7 @@ test("allows up to the limit within a window, then denies", () => {
 });
 
 test("separate keys have separate budgets", () => {
-  let now = 5_000;
+  const now = 5_000;
   const limiter = createRateLimiter({ limit: 1, windowMs: 1000, now: () => now });
   assert.equal(limiter.check("a").allowed, true);
   assert.equal(limiter.check("b").allowed, true);
