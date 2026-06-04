@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test tests/unit/*.test.ts",
+    "test": "tsx --env-file-if-exists=.env.local --test tests/unit/*.test.ts",
     "ui:check": "tsx scripts/ui-prototype-check.ts",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",

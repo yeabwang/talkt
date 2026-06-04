@@ -2,6 +2,7 @@
 // and publishing. All reads go through the DTO seam so callers never see
 // ownerId or other users' data.
 import type { Interview as UiInterview } from "@/components/talkt/data";
+import { cachedDirectoryRows } from "@/lib/db/directory-cache";
 import { prisma } from "@/lib/prisma";
 import { interviewRowSelect, toTemplateDTO, type InterviewRow, type ViewerContext } from "@/lib/dto";
 import { toLanguageCode } from "@/lib/language";
@@ -25,14 +26,10 @@ async function votesByViewer(viewerId: string | null, interviewIds: string[]): P
  * templates and published community customs.
  */
 export async function listDirectory(viewerId: string | null): Promise<UiInterview[]> {
-  const rows = await prisma.interview.findMany({
-    where: { visibility: "public", flagged: false },
-    select: interviewRowSelect,
-    orderBy: [{ rankScore: "desc" }, { createdAt: "desc" }],
-  });
+  const rows = await cachedDirectoryRows();
   const myVotes = await votesByViewer(viewerId, rows.map((r) => r.id));
   return rows.map((row) =>
-    toTemplateDTO(row as InterviewRow, {
+    toTemplateDTO(row, {
       myVote: myVotes.get(row.id) ?? 0,
       mine: viewerId != null && row.ownerId === viewerId,
     }),
