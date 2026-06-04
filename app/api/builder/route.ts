@@ -2,6 +2,10 @@ import { auth } from "@clerk/nextjs/server";
 import type { NextRequest } from "next/server";
 
 import { chatJSON, type ChatMessage } from "@/lib/llm";
+import { createRateLimiter } from "@/lib/rate-limit";
+
+// 20 builder turns/minute/user — generous for a conversation, caps LLM cost abuse.
+const builderLimiter = createRateLimiter({ limit: 20, windowMs: 60_000 });
 
 // One builder turn. Always present so the client can bind every field; the
 // `ready`/`questions`/`dimensions` payload fills in only on the final turn.
@@ -75,6 +79,14 @@ RULES:
 export async function POST(req: NextRequest) {
   const { userId } = await auth();
   if (!userId) return new Response("Unauthorized", { status: 401 });
+
+  const decision = builderLimiter.check(userId);
+  if (!decision.allowed) {
+    return Response.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(decision.retryAfterMs / 1000)) } },
+    );
+  }
 
   let body: { messages?: ClientMessage[]; language?: string };
   try {
