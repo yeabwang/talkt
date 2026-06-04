@@ -27,19 +27,39 @@ interface VapiMessage {
 // Pull a human-readable message out of the assorted error shapes the Web SDK
 // and underlying Daily transport throw (string | Error | {errorMsg|message|type}
 // | {error:{message}}).
-function extractErrorMessage(raw: unknown): string {
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+export function extractVapiErrorMessage(raw: unknown): string {
   if (!raw) return "";
   if (typeof raw === "string") return raw;
   if (raw instanceof Error) return raw.message;
-  const o = raw as Record<string, unknown>;
-  const nested = o.error as Record<string, unknown> | undefined;
-  return (
-    (typeof o.errorMsg === "string" && o.errorMsg) ||
-    (typeof o.message === "string" && o.message) ||
-    (nested && typeof nested.message === "string" && nested.message) ||
-    (typeof o.type === "string" && o.type) ||
-    ""
-  );
+
+  const seen = new Set<Record<string, unknown>>();
+  const readMessage = (value: unknown): string | undefined => {
+    const record = asRecord(value);
+    if (!record || seen.has(record)) return undefined;
+    seen.add(record);
+
+    for (const key of ["errorMsg", "message", "msg"]) {
+      const message = nonEmptyString(record[key]);
+      if (message) return message;
+    }
+
+    for (const key of ["error", "message", "details"]) {
+      const message = readMessage(record[key]);
+      if (message) return message;
+    }
+
+    return nonEmptyString(record.type);
+  };
+
+  return readMessage(raw) ?? "";
 }
 
 // Daily/Vapi emit these as `error` events during a *normal* call teardown.
@@ -47,10 +67,11 @@ function extractErrorMessage(raw: unknown): string {
 const BENIGN_END_PATTERNS = [
   "meeting has ended",
   "meeting ended",
+  "room was deleted",
   "signaling connection interrupted",
   "ejected",
 ];
-function isBenignEnd(msg: string): boolean {
+export function isVapiBenignEnd(msg: string): boolean {
   const m = msg.toLowerCase();
   return BENIGN_END_PATTERNS.some((p) => m.includes(p));
 }
@@ -177,11 +198,11 @@ export function useVapiCall(): UseVapiCall {
         });
         vapi.on("error", (...args: unknown[]) => {
           const raw = args[0];
-          const msg = extractErrorMessage(raw);
+          const msg = extractVapiErrorMessage(raw);
           // A benign teardown disconnect, or any error after we've connected,
           // means the call is over — end gracefully and let the results poller
           // take over instead of showing the connect-failed screen.
-          if (isBenignEnd(msg) || connectedRef.current) {
+          if (isVapiBenignEnd(msg) || connectedRef.current) {
             console.debug("[vapi] call ended:", msg || raw);
             setAssistantSpeaking(false);
             setUserSpeaking(false);
