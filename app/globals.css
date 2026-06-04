@@ -838,3 +838,23 @@ html.anim .stagger > *:nth-child(8) { animation-delay: 420ms; }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Loading skeleton shimmer (see components/talkt/skeletons.tsx). */
+.talkt-skeleton {
+  position: relative;
+  overflow: hidden;
+}
+.talkt-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--foreground) 6%, transparent), transparent);
+  animation: talkt-shimmer 1.4s infinite;
+}
+@keyframes talkt-shimmer {
+  100% { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .talkt-skeleton::after { animation: none; }
+}
