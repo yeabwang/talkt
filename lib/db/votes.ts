@@ -1,6 +1,7 @@
 // Vote repository: one up/down vote per user per interview, with atomic tally
 // recompute, rank update, and auto-flag — all in a single transaction so the
 // denormalized counts can never drift from the Vote rows.
+import { revalidateDirectory } from "@/lib/db/directory-cache";
 import { prisma } from "@/lib/prisma";
 import { rankScore, shouldFlag } from "@/lib/ranking";
 
@@ -15,7 +16,7 @@ export type CastVoteResult =
  * downvotes dominate (see lib/ranking shouldFlag).
  */
 export async function castVote(userId: string, interviewId: string, value: -1 | 0 | 1): Promise<CastVoteResult> {
-  return prisma.$transaction(async (tx): Promise<CastVoteResult> => {
+  const result = await prisma.$transaction(async (tx): Promise<CastVoteResult> => {
     const interview = await tx.interview.findUnique({
       where: { id: interviewId },
       select: { ownerId: true, anonymous: true, flagged: true, visibility: true },
@@ -52,4 +53,6 @@ export async function castVote(userId: string, interviewId: string, value: -1 | 
 
     return { ok: true, upvotes, downvotes, myVote: value, flagged: interview.flagged || newlyFlagged };
   });
+  if (result.ok) revalidateDirectory();
+  return result;
 }

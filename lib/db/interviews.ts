@@ -2,7 +2,7 @@
 // and publishing. All reads go through the DTO seam so callers never see
 // ownerId or other users' data.
 import type { Interview as UiInterview } from "@/components/talkt/data";
-import { cachedDirectoryRows } from "@/lib/db/directory-cache";
+import { cachedDirectoryRows, revalidateDirectory } from "@/lib/db/directory-cache";
 import { prisma } from "@/lib/prisma";
 import { interviewRowSelect, toTemplateDTO, type InterviewRow, type ViewerContext } from "@/lib/dto";
 import { toLanguageCode } from "@/lib/language";
@@ -127,5 +127,6 @@ export async function publish(
     },
     select: interviewRowSelect,
   });
+  revalidateDirectory();
   return { ok: true, interview: toTemplateDTO(row as InterviewRow, { mine: true, myVote: 0 }) };
 }
