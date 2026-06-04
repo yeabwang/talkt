@@ -5,6 +5,7 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import type { NextRequest } from "next/server";
 
+import { notFound, tooManyRequests, unauthorized } from "@/lib/api";
 import { createAttempt } from "@/lib/db/attempts";
 import { getInterview } from "@/lib/db/interviews";
 import { ensureUser } from "@/lib/db/users";
@@ -19,21 +20,16 @@ const callLimiter = createRateLimiter({ limit: 10, windowMs: 60_000 });
 
 export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { userId } = await auth();
-  if (!userId) return new Response("Unauthorized", { status: 401 });
+  if (!userId) return unauthorized();
 
   const decision = callLimiter.check(userId);
-  if (!decision.allowed) {
-    return Response.json(
-      { error: "Too many requests. Please wait a moment." },
-      { status: 429, headers: { "Retry-After": String(Math.ceil(decision.retryAfterMs / 1000)) } },
-    );
-  }
+  if (!decision.allowed) return tooManyRequests(decision.retryAfterMs, "Too many requests. Please wait a moment.");
 
   const { id } = await ctx.params;
   await ensureUser();
 
   const interview = await getInterview(id, userId);
-  if (!interview) return Response.json({ error: "Interview not found" }, { status: 404 });
+  if (!interview) return notFound("Interview not found");
 
   const voice = await resolveVoiceAgent(interview.voice);
   const attemptId = await createAttempt(userId, interview.id);

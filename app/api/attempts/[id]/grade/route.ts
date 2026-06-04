@@ -10,17 +10,18 @@ import { auth as triggerAuth, tasks } from "@trigger.dev/sdk";
 import type { NextRequest } from "next/server";
 
 import type { gradeAttempt } from "@/trigger/grade-attempt";
+import { notFound, unauthorized } from "@/lib/api";
 import { findOwnedAttempt } from "@/lib/db/attempts";
 import { sanitizeTranscript } from "@/lib/transcript";
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { userId } = await auth();
-  if (!userId) return new Response("Unauthorized", { status: 401 });
+  if (!userId) return unauthorized();
 
   const { id } = await ctx.params;
   // Owner check before we trigger — the task itself trusts its caller.
   const attempt = await findOwnedAttempt(id, userId);
-  if (!attempt) return Response.json({ error: "Not found" }, { status: 404 });
+  if (!attempt) return notFound();
   if (attempt.status === "ready") return Response.json({ status: "ready" });
 
   const body = (await req.json().catch(() => null)) as { transcript?: unknown } | null;

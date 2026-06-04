@@ -7,6 +7,7 @@ import { tasks } from "@trigger.dev/sdk";
 import type { NextRequest } from "next/server";
 
 import type { gradeAttempt } from "@/trigger/grade-attempt";
+import { jsonError } from "@/lib/api";
 import { findAttemptForWebhook } from "@/lib/db/attempts";
 
 const WEBHOOK_SECRET = process.env.VAPI_WEBHOOK_SECRET;
@@ -35,10 +36,10 @@ export async function POST(req: NextRequest) {
   // production a missing secret is a misconfiguration, not a bypass — fail closed.
   if (WEBHOOK_SECRET) {
     const provided = req.headers.get("x-vapi-secret");
-    if (provided !== WEBHOOK_SECRET) return new Response("Unauthorized", { status: 401 });
+    if (provided !== WEBHOOK_SECRET) return jsonError("Unauthorized", 401);
   } else if (process.env.NODE_ENV === "production") {
     console.error("[vapi/webhook] VAPI_WEBHOOK_SECRET is not set — rejecting unverified webhook");
-    return new Response("Webhook not configured", { status: 503 });
+    return jsonError("Webhook not configured", 503);
   }
 
   let body: Record<string, unknown>;

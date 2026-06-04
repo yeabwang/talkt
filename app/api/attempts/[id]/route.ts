@@ -4,22 +4,23 @@
 import { auth } from "@clerk/nextjs/server";
 import type { NextRequest } from "next/server";
 
+import { notFound, unauthorized } from "@/lib/api";
 import { attachCallId, getAttemptStatus } from "@/lib/db/attempts";
 import { isRecord, optString } from "@/lib/validate";
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { userId } = await auth();
-  if (!userId) return new Response("Unauthorized", { status: 401 });
+  if (!userId) return unauthorized();
 
   const { id } = await ctx.params;
   const result = await getAttemptStatus(id, userId);
-  if (!result) return Response.json({ error: "Not found" }, { status: 404 });
+  if (!result) return notFound();
   return Response.json(result);
 }
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { userId } = await auth();
-  if (!userId) return new Response("Unauthorized", { status: 401 });
+  if (!userId) return unauthorized();
 
   const { id } = await ctx.params;
   const raw = await req.json().catch(() => null);

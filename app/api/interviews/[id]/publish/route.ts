@@ -3,13 +3,14 @@
 import { auth } from "@clerk/nextjs/server";
 import type { NextRequest } from "next/server";
 
+import { badRequest, forbidden, notFound, unauthorized } from "@/lib/api";
 import { publish } from "@/lib/db/interviews";
 import { ensureUser } from "@/lib/db/users";
 import { ValidationError, isRecord, optBool, optString } from "@/lib/validate";
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { userId } = await auth();
-  if (!userId) return new Response("Unauthorized", { status: 401 });
+  if (!userId) return unauthorized();
 
   const { id } = await ctx.params;
 
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   try {
     raw = await req.json();
   } catch {
-    return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+    return badRequest("Invalid JSON body");
   }
 
   let displayName: string | undefined;
@@ -29,15 +30,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     // supplied, publish() falls back to the owner's stored account name.
     displayName = anonymous ? undefined : optString(raw.displayName, "displayName", 80);
   } catch (error) {
-    if (error instanceof ValidationError) return Response.json({ error: error.message }, { status: 400 });
-    return Response.json({ error: "Invalid request" }, { status: 400 });
+    if (error instanceof ValidationError) return badRequest(error.message);
+    return badRequest("Invalid request");
   }
 
   await ensureUser();
   const result = await publish(id, userId, { displayName, anonymous });
   if (!result.ok) {
-    const status = result.reason === "not_found" ? 404 : 403;
-    return Response.json({ error: result.reason }, { status });
+    return result.reason === "not_found" ? notFound(result.reason) : forbidden(result.reason);
   }
   return Response.json({ interview: result.interview });
 }

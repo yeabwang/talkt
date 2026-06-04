@@ -3,6 +3,7 @@
 import { auth } from "@clerk/nextjs/server";
 import type { NextRequest } from "next/server";
 
+import { badRequest, unauthorized } from "@/lib/api";
 import { createFromBuilder, type BuilderInterviewInput } from "@/lib/db/interviews";
 import { ensureUser } from "@/lib/db/users";
 import {
@@ -15,13 +16,13 @@ import {
 
 export async function POST(req: NextRequest) {
   const { userId } = await auth();
-  if (!userId) return new Response("Unauthorized", { status: 401 });
+  if (!userId) return unauthorized();
 
   let raw: unknown;
   try {
     raw = await req.json();
   } catch {
-    return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+    return badRequest("Invalid JSON body");
   }
 
   let input: BuilderInterviewInput;
@@ -60,8 +61,8 @@ export async function POST(req: NextRequest) {
       dimensions,
     };
   } catch (error) {
-    if (error instanceof ValidationError) return Response.json({ error: error.message }, { status: 400 });
-    return Response.json({ error: "Invalid request" }, { status: 400 });
+    if (error instanceof ValidationError) return badRequest(error.message);
+    return badRequest("Invalid request");
   }
 
   await ensureUser();

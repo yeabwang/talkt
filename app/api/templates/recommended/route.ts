@@ -3,6 +3,7 @@
 // with each template's directory rank. Cold start falls back to pure rank.
 import { auth } from "@clerk/nextjs/server";
 
+import { unauthorized } from "@/lib/api";
 import { listAttemptFacets } from "@/lib/db/attempts";
 import { listDirectory } from "@/lib/db/interviews";
 import { ensureUser } from "@/lib/db/users";
@@ -16,7 +17,7 @@ import {
 
 export async function GET() {
   const { userId } = await auth();
-  if (!userId) return new Response("Unauthorized", { status: 401 });
+  if (!userId) return unauthorized();
   await ensureUser();
 
   const [attempts, interviews] = await Promise.all([listAttemptFacets(userId), listDirectory(userId)]);

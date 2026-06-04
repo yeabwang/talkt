@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import type { NextRequest } from "next/server";
 
+import { badRequest, jsonError, tooManyRequests, unauthorized } from "@/lib/api";
 import { chatJSON, type ChatMessage } from "@/lib/llm";
 import { createRateLimiter } from "@/lib/rate-limit";
 
@@ -78,21 +79,16 @@ RULES:
 
 export async function POST(req: NextRequest) {
   const { userId } = await auth();
-  if (!userId) return new Response("Unauthorized", { status: 401 });
+  if (!userId) return unauthorized();
 
   const decision = builderLimiter.check(userId);
-  if (!decision.allowed) {
-    return Response.json(
-      { error: "Too many requests. Please slow down." },
-      { status: 429, headers: { "Retry-After": String(Math.ceil(decision.retryAfterMs / 1000)) } },
-    );
-  }
+  if (!decision.allowed) return tooManyRequests(decision.retryAfterMs);
 
   let body: { messages?: ClientMessage[]; language?: string };
   try {
     body = await req.json();
   } catch {
-    return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+    return badRequest("Invalid JSON body");
   }
 
   const language = typeof body.language === "string" && body.language.trim() ? body.language.trim() : "English";
@@ -115,7 +111,7 @@ export async function POST(req: NextRequest) {
     return Response.json(normalizeTurn(raw));
   } catch (error) {
     console.error("[builder] LLM turn failed:", error);
-    return Response.json({ error: "The builder is unavailable right now. Please try again." }, { status: 502 });
+    return jsonError("The builder is unavailable right now. Please try again.", 502);
   }
 }
 
