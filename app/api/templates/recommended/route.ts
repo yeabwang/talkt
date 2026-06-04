@@ -6,7 +6,6 @@ import { auth } from "@clerk/nextjs/server";
 import { unauthorized } from "@/lib/api";
 import { listAttemptFacets } from "@/lib/db/attempts";
 import { listDirectory } from "@/lib/db/interviews";
-import { ensureUser } from "@/lib/db/users";
 import { rankScore } from "@/lib/ranking";
 import {
   buildProfile,
@@ -18,8 +17,11 @@ import {
 export async function GET() {
   const { userId } = await auth();
   if (!userId) return unauthorized();
-  await ensureUser();
 
+  // Read-only path: no ensureUser() here. Syncing the Clerk profile row is a
+  // write-path concern (call/create/vote/publish); forcing it on this hot mount
+  // endpoint added a Clerk roundtrip + DB upsert before the reads could even
+  // start. A user with no row simply has no attempt facets yet (cold start).
   const [attempts, interviews] = await Promise.all([listAttemptFacets(userId), listDirectory(userId)]);
   const profile = buildProfile(attempts);
 
