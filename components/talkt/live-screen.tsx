@@ -65,11 +65,18 @@ export function LiveInterviewScreen({
     turnsRef.current = call.turns;
   }, [call.turns]);
 
+  const endedHandledRef = React.useRef(false);
   React.useEffect(() => {
-    if (call.status === "ended") {
+    if (call.status !== "ended" || endedHandledRef.current) return;
+    endedHandledRef.current = true;
+    // Don't yank to results the instant the line drops. Hold a brief graceful
+    // wrap so the end doesn't feel abrupt, and so any trailing *final* transcript
+    // turns (the interviewer's sign-off, the last answer) settle before handoff.
+    const timer = window.setTimeout(() => {
       const transcript = turnsRef.current.map((t) => ({ role: t.role, text: t.text }));
       onEnd(session.attemptId, transcript);
-    }
+    }, 1800);
+    return () => window.clearTimeout(timer);
   }, [call.status, onEnd, session.attemptId]);
 
   const aiSpeaking = call.assistantSpeaking;
@@ -81,6 +88,20 @@ export function LiveInterviewScreen({
   }, [call.turns]);
 
   const endCall = () => call.stop();
+
+  if (call.status === "ended") {
+    return (
+      <div style={{ minHeight: "100vh", background: "var(--background)", display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
+        <div className="text-center fade-in" style={{ maxWidth: 420 }}>
+          <Icon name="loader" size={26} className="spin" style={{ color: "var(--muted-foreground)" }} />
+          <h2 className="h2" style={{ margin: "16px 0 8px" }}>
+            Wrapping up your interview
+          </h2>
+          <p className="caption">Preparing your results…</p>
+        </div>
+      </div>
+    );
+  }
 
   if (call.status === "error") {
     return (
