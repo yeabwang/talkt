@@ -113,8 +113,11 @@ model Attempt {
 
   feedback Feedback?
 
-  @@index([userId])
   @@index([interviewId])
+  // History list: userId + status filter, startedAt sort (listUserAttempts).
+  @@index([userId, status, startedAt])
+  // Recommendation facets: userId filter, startedAt sort (listAttemptFacets).
+  @@index([userId, startedAt])
 }
 
 // Cached pool of usable voice agents. The lobby/start path resolves a persona
