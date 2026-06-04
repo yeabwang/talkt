@@ -81,6 +81,7 @@ interface VapiInstance {
   start: (assistant: unknown) => Promise<unknown>;
   stop: () => void;
   setMuted: (muted: boolean) => void;
+  isMuted: () => boolean;
   on: (event: string, cb: (...args: unknown[]) => void) => void;
   removeAllListeners: () => void;
 }
@@ -94,6 +95,7 @@ export interface UseVapiCall {
   muted: boolean;
   callId: string | null;
   error: string | null;
+  noInputDetected: boolean;
   start: (publicKey: string, assistant: unknown) => Promise<void>;
   stop: () => void;
   toggleMute: () => void;
@@ -108,15 +110,21 @@ export function useVapiCall(): UseVapiCall {
   const [muted, setMuted] = React.useState(false);
   const [callId, setCallId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  // Set when we connect but never receive a single user transcript — a strong
+  // sign the candidate's mic isn't reaching Vapi (so they'd go ungraded).
+  const [noInputDetected, setNoInputDetected] = React.useState(false);
 
   const vapiRef = React.useRef<VapiInstance | null>(null);
   const userIdleTimer = React.useRef<number | null>(null);
+  const heardUserRef = React.useRef(false);
+  const noInputTimer = React.useRef<number | null>(null);
   // Set once the call connects — used to distinguish a normal teardown
   // disconnect (route to results) from a genuine connect failure (error screen).
   const connectedRef = React.useRef(false);
 
   const cleanup = React.useCallback(() => {
     if (userIdleTimer.current) window.clearTimeout(userIdleTimer.current);
+    if (noInputTimer.current) window.clearTimeout(noInputTimer.current);
     const vapi = vapiRef.current;
     if (vapi) {
       try {
@@ -160,6 +168,8 @@ export function useVapiCall(): UseVapiCall {
       setError(null);
       setTurns([]);
       connectedRef.current = false;
+      heardUserRef.current = false;
+      setNoInputDetected(false);
 
       try {
         const mod = await import("@vapi-ai/web");
@@ -170,10 +180,37 @@ export function useVapiCall(): UseVapiCall {
         vapi.on("call-start", () => {
           connectedRef.current = true;
           setStatus("active");
+          // Defensive: some Daily/browser combinations connect with the local mic
+          // off, so the interviewer is heard but the candidate is never captured.
+          // Force the mic live at connect; the UI mute toggle still controls it after.
+          try {
+            vapi.setMuted(false);
+            console.debug("[vapi] connected — mic muted?", vapi.isMuted());
+          } catch (e) {
+            console.warn("[vapi] could not assert mic state:", e);
+          }
+          // If no user transcript lands within ~10s of connecting, the mic almost
+          // certainly isn't reaching Vapi — flag it so the UI can warn the user.
+          if (noInputTimer.current) window.clearTimeout(noInputTimer.current);
+          noInputTimer.current = window.setTimeout(() => {
+            if (!heardUserRef.current) {
+              console.warn("[vapi] no candidate audio ~10s after connect — mic may not be captured");
+              setNoInputDetected(true);
+            }
+          }, 10_000);
         });
         vapi.on("call-start-success", (...args: unknown[]) => {
           const e = args[0] as { callId?: string } | undefined;
           if (e?.callId) setCallId(e.callId);
+        });
+        // The SDK fires this when the connect handshake fails (mic acquisition,
+        // transport, token). Without it a failed start would hang on "connecting"
+        // or run output-only. Surface it as a real error so the user can retry.
+        vapi.on("call-start-failed", (...args: unknown[]) => {
+          const e = args[0] as { error?: string; stage?: string } | undefined;
+          console.error("[vapi] call start failed:", e);
+          setError(e?.error || "Couldn't start the call. Check your microphone and try again.");
+          setStatus("error");
         });
         vapi.on("call-end", () => {
           setAssistantSpeaking(false);
@@ -191,6 +228,8 @@ export function useVapiCall(): UseVapiCall {
           pushTranscript(role, msg.transcript, final);
 
           if (role === "user") {
+            heardUserRef.current = true;
+            setNoInputDetected(false); // React bails out if already false — no extra render
             setUserSpeaking(true);
             if (userIdleTimer.current) window.clearTimeout(userIdleTimer.current);
             userIdleTimer.current = window.setTimeout(() => setUserSpeaking(false), final ? 200 : 1200);
@@ -245,5 +284,5 @@ export function useVapiCall(): UseVapiCall {
     });
   }, []);
 
-  return { status, turns, assistantSpeaking, userSpeaking, volume, muted, callId, error, start, stop, toggleMute };
+  return { status, turns, assistantSpeaking, userSpeaking, volume, muted, callId, error, noInputDetected, start, stop, toggleMute };
 }

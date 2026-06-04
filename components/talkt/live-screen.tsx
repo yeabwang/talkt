@@ -151,6 +151,19 @@ export function LiveInterviewScreen({
         <div style={{ height: "100%", width: `${Math.min(100, (elapsed / estTotal) * 100)}%`, background: "var(--foreground)", transition: "width var(--dur-base) var(--ease-out)" }} />
       </div>
 
+      {call.status === "active" && call.noInputDetected ? (
+        <div
+          className="fade-in flex items-center justify-center gap-2"
+          role="alert"
+          style={{ padding: "10px 16px", background: "var(--error)", color: "var(--error-foreground)", fontSize: 13, fontWeight: 500, zIndex: 6 }}
+        >
+          <Icon name="mic-off" size={15} />
+          {call.muted
+            ? "You're muted — tap the mic to unmute so the interviewer can hear you."
+            : "We're not hearing you. Check your microphone and that the browser has mic access."}
+        </div>
+      ) : null}
+
       <div className="grow flex" style={{ minHeight: 0 }}>
         <div className="grow flex flex-col items-center justify-center" style={{ padding: "clamp(20px, 3vh, 34px) 24px", gap: 28, minWidth: 0, minHeight: 0 }}>
           <div className="talkt-live-tiles">
