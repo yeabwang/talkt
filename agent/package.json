@@ -1,0 +1,26 @@
+{
+  "name": "talkt-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "TalkT LiveKit interviewer agent worker (spec 15).",
+  "scripts": {
+    "dev": "tsx --env-file-if-exists=.env.local src/index.ts dev",
+    "start": "tsx --env-file-if-exists=.env.local src/index.ts start",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@livekit/agents": "^1.4.5",
+    "@livekit/agents-plugin-livekit": "^1.4.5",
+    "@livekit/agents-plugin-silero": "^1.4.5",
+    "@livekit/rtc-node": "^0.13.29",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4.22.4",
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  }
+}
