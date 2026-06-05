@@ -76,6 +76,24 @@ export function isVapiBenignEnd(msg: string): boolean {
   return BENIGN_END_PATTERNS.some((p) => m.includes(p));
 }
 
+// True when a Web SDK message is the interviewer invoking the `end_interview`
+// tool. Tolerates both the legacy `function-call` and the newer `tool-calls`
+// message shapes (name nested under `function` or flat).
+export function isEndInterviewCall(msg: Record<string, unknown>): boolean {
+  const named = (value: unknown): boolean => {
+    const rec = asRecord(value);
+    if (!rec) return false;
+    const name = rec.name ?? asRecord(rec.function)?.name;
+    return name === "end_interview";
+  };
+  if (msg.type === "function-call") return named(msg.functionCall);
+  if (msg.type === "tool-calls") {
+    const list = msg.toolCallList ?? msg.toolCalls ?? msg.toolWithToolCallList;
+    return Array.isArray(list) && list.some(named);
+  }
+  return false;
+}
+
 // Minimal structural type for the Vapi Web SDK instance we use.
 interface VapiInstance {
   start: (assistant: unknown) => Promise<unknown>;
@@ -96,8 +114,11 @@ export interface UseVapiCall {
   callId: string | null;
   error: string | null;
   noInputDetected: boolean;
+  // True once the candidate ended the call themselves (mid-interview hang-up),
+  // as opposed to a natural end_interview / time-cap completion. Gates grading.
+  endedManually: boolean;
   start: (publicKey: string, assistant: unknown) => Promise<void>;
-  stop: () => void;
+  stop: (manual?: boolean) => void;
   toggleMute: () => void;
 }
 
@@ -110,6 +131,7 @@ export function useVapiCall(): UseVapiCall {
   const [muted, setMuted] = React.useState(false);
   const [callId, setCallId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [endedManually, setEndedManually] = React.useState(false);
   // Set when we connect but never receive a single user transcript — a strong
   // sign the candidate's mic isn't reaching Vapi (so they'd go ungraded).
   const [noInputDetected, setNoInputDetected] = React.useState(false);
@@ -170,6 +192,7 @@ export function useVapiCall(): UseVapiCall {
       connectedRef.current = false;
       heardUserRef.current = false;
       setNoInputDetected(false);
+      setEndedManually(false);
 
       try {
         const mod = await import("@vapi-ai/web");
@@ -222,6 +245,21 @@ export function useVapiCall(): UseVapiCall {
         vapi.on("volume-level", (...args: unknown[]) => setVolume(Number(args[0]) || 0));
         vapi.on("message", (...args: unknown[]) => {
           const msg = args[0] as VapiMessage;
+
+          // Natural completion: the interviewer says goodbye then calls
+          // end_interview. Let the trailing audio flush, then drop the line —
+          // call-end routes to grading.
+          if (msg && isEndInterviewCall(msg as unknown as Record<string, unknown>)) {
+            window.setTimeout(() => {
+              try {
+                vapi.stop();
+              } catch {
+                /* already torn down */
+              }
+            }, 800);
+            return;
+          }
+
           if (msg?.type !== "transcript" || typeof msg.transcript !== "string") return;
           const role = msg.role === "user" ? "user" : "assistant";
           const final = msg.transcriptType === "final";
@@ -264,7 +302,11 @@ export function useVapiCall(): UseVapiCall {
     [cleanup, pushTranscript],
   );
 
-  const stop = React.useCallback(() => {
+  // `manual` marks a candidate-initiated hang-up (the End button) so the screen
+  // knows not to grade it. The natural end_interview path stops the SDK directly
+  // and leaves this false.
+  const stop = React.useCallback((manual = false) => {
+    if (manual) setEndedManually(true);
     try {
       vapiRef.current?.stop();
     } catch {
@@ -284,5 +326,5 @@ export function useVapiCall(): UseVapiCall {
     });
   }, []);
 
-  return { status, turns, assistantSpeaking, userSpeaking, volume, muted, callId, error, noInputDetected, start, stop, toggleMute };
+  return { status, turns, assistantSpeaking, userSpeaking, volume, muted, callId, error, noInputDetected, endedManually, start, stop, toggleMute };
 }

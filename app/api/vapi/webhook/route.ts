@@ -8,12 +8,34 @@ import type { NextRequest } from "next/server";
 
 import type { gradeAttempt } from "@/trigger/grade-attempt";
 import { jsonError } from "@/lib/api";
-import { findAttemptForWebhook } from "@/lib/db/attempts";
+import { findAttemptForWebhook, markAbandoned } from "@/lib/db/attempts";
 
 const WEBHOOK_SECRET = process.env.VAPI_WEBHOOK_SECRET;
 
 function str(v: unknown): string | null {
   return typeof v === "string" && v ? v : null;
+}
+
+// endedReason values that mean the interview reached a real finish (vs. the
+// candidate bailing): Vapi ended it for the assistant/time, not the customer.
+const COMPLETION_REASONS = ["max-duration", "assistant-ended", "assistant-said-end", "assistant-forwarded"];
+function isCompletionReason(reason: string | null): boolean {
+  if (!reason) return false;
+  const r = reason.toLowerCase();
+  return COMPLETION_REASONS.some((p) => r.includes(p));
+}
+
+// True when the end-of-call report shows the assistant invoked the end_interview
+// tool — the unambiguous natural-completion signal (the customer-ended client
+// stop we do for that path can't be told apart by endedReason alone).
+function calledEndInterview(value: unknown, depth = 0): boolean {
+  if (depth > 6 || !value || typeof value !== "object") return false;
+  if (Array.isArray(value)) return value.some((v) => calledEndInterview(v, depth + 1));
+  const rec = value as Record<string, unknown>;
+  if (rec.name === "end_interview") return true;
+  const fn = rec.function;
+  if (fn && typeof fn === "object" && (fn as Record<string, unknown>).name === "end_interview") return true;
+  return Object.values(rec).some((v) => calledEndInterview(v, depth + 1));
 }
 
 /** Normalize the many transcript shapes Vapi may send into {role, text} turns. */
@@ -60,8 +82,19 @@ export async function POST(req: NextRequest) {
 
   const attempt = await findAttemptForWebhook(attemptId, vapiCallId);
   if (!attempt) return Response.json({ ok: true });
-  // Idempotent: grading already done or in flight (likely the client beat us).
-  if (attempt.status === "ready" || attempt.status === "analyzing") return Response.json({ ok: true });
+  // Not `in_progress` → already graded/in flight (client beat us) or already
+  // marked `abandoned`. Nothing to do.
+  if (attempt.status !== "in_progress") return Response.json({ ok: true });
+
+  // Grade only interviews that actually completed: the assistant invoked
+  // end_interview, or Vapi ended it for time. A candidate mid-call hang-up has
+  // neither signal — mark it abandoned and never score it. This is independent
+  // of the client's abandon PATCH, so a lost/late PATCH can't slip a partial in.
+  const endedReason = str(message.endedReason) ?? str(call.endedReason);
+  if (!calledEndInterview(message) && !isCompletionReason(endedReason)) {
+    await markAbandoned(attempt.id);
+    return Response.json({ ok: true });
+  }
 
   const transcript = extractTurns(message);
   // Same idempotency key as the client path — if the browser already triggered

@@ -36,6 +36,32 @@ export function HeroSkeleton() {
   );
 }
 
+/**
+ * Full-page placeholder shown while an already-graded report's stored feedback
+ * loads — the same calm shimmer the dashboard uses, not the live grading-steps
+ * screen (which is only for a fresh interview being scored).
+ */
+export function ReportSkeleton() {
+  return (
+    <div className="fade-up talkt-page" style={{ paddingTop: 40 }} role="status" aria-label="Loading report">
+      <div style={{ marginBottom: 30 }}>
+        <Shimmer style={{ height: 12, width: 140, marginBottom: 12 }} />
+        <Shimmer style={{ height: 28, width: "45%", marginBottom: 10 }} />
+        <Shimmer style={{ height: 12, width: 260 }} />
+      </div>
+      <div className="card rounded-lg" style={{ padding: 32, display: "flex", gap: 40, alignItems: "center", marginBottom: 30 }}>
+        <Shimmer style={{ height: 140, width: 140, borderRadius: "50%" }} />
+        <div style={{ flex: 1 }}>
+          <Shimmer style={{ height: 12, width: 90, marginBottom: 14 }} />
+          <Shimmer style={{ height: 14, width: "100%", marginBottom: 8 }} />
+          <Shimmer style={{ height: 14, width: "80%" }} />
+        </div>
+      </div>
+      <CardGridSkeleton count={4} />
+    </div>
+  );
+}
+
 /** Placeholder rows for the reports history list. */
 export function ReportsListSkeleton({ rows = 5 }: { rows?: number }) {
   return (

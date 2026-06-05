@@ -42,6 +42,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     languageLabel: interview.language ?? "English",
     attemptId,
     interviewerName: voice.name,
+    persona: voice.key,
     candidateFirstName: clerk?.firstName ?? undefined,
   });
 
@@ -49,5 +50,6 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     attemptId,
     publicKey: process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY ?? "",
     assistant,
+    interviewerName: voice.name,
   });
 }

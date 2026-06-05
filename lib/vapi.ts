@@ -66,11 +66,47 @@ function transcriberFor(language: string) {
   return { provider: "deepgram" as const, model: "nova-3", language };
 }
 
-function systemPrompt(interview: Interview, questions: string[], languageLabel: string): string {
+// Endpointing/barge-in tuning. Default Vapi treats every mid-sentence pause as
+// end-of-turn, so the interviewer talks over the candidate. Wait longer and use
+// smart endpointing (LiveKit = English-only; Vapi model = multilingual) so a
+// turn only ends when the candidate is actually done. stopSpeakingPlan keeps a
+// stray "um" from making the interviewer cut out and restart.
+function speakingPlans(language: string) {
+  const english = language === "en";
+  return {
+    startSpeakingPlan: {
+      waitSeconds: 0.8,
+      smartEndpointingPlan: { provider: english ? ("livekit" as const) : ("vapi" as const) },
+      // Fallback only (ignored while smartEndpointingPlan is set): be patient when
+      // the candidate trails off without punctuation.
+      transcriptionEndpointingPlan: { onPunctuationSeconds: 0.3, onNoPunctuationSeconds: 2, onNumberSeconds: 0.6 },
+    },
+    stopSpeakingPlan: { numWords: 2, voiceSeconds: 0.3, backoffSeconds: 1.5 },
+  };
+}
+
+// Per-persona spoken delivery cue, keyed by voice-agent key. Steers cadence/tone
+// to match the chosen voice; empty for unknown personas.
+const DELIVERY_CUES: Record<string, string> = {
+  adi: "Speak calmly and in a measured, unhurried way.",
+  ren: "Speak warmly and directly, naturally encouraging.",
+  kai: "Speak briskly and precisely; keep turns crisp.",
+  mira: "Speak gently and patiently, leaving space after questions.",
+};
+
+function systemPrompt(args: {
+  interview: Interview;
+  questions: string[];
+  languageLabel: string;
+  interviewerName: string;
+  deliveryCue: string;
+}): string {
+  const { interview, questions, languageLabel, interviewerName, deliveryCue } = args;
   const list = questions.map((q, i) => `${i + 1}. ${q}`).join("\n");
   return [
-    `You are ${interview.title ? `the interviewer for "${interview.title}"` : "a professional interviewer"} on TalkT, a spoken interview-practice platform.`,
+    `You are ${interviewerName}, the interviewer${interview.title ? ` for "${interview.title}"` : ""} on TalkT, a spoken interview-practice platform.`,
     `Speak entirely in ${languageLabel}. This is a live voice conversation, so keep every turn short, natural, and spoken — never read like an essay.`,
+    deliveryCue,
     "",
     "## Role",
     "You are the INTERVIEWER, not a tutor or assistant. Your job is to run a realistic interview and let the candidate do the thinking. The candidate is being evaluated; you are not here to help them get the right answer.",
@@ -88,12 +124,37 @@ function systemPrompt(interview: Interview, questions: string[], languageLabel: 
     "- Keep follow-ups open and neutral ('Can you walk me through how?', 'What led you to that?', 'Can you give a concrete example?'). Never phrase a follow-up so it gives away the answer.",
     "- If the candidate is silent, says 'I don't know', or asks to skip: acknowledge calmly, optionally offer one gentle 'Take your time' or 'Anything at all you'd approach?', then move to the next question. Do NOT fill the gap with the answer.",
     "- Stay in character as a human interviewer throughout. Do not mention prompts, models, or that you are an AI.",
-    "- When the final question is done (including any follow-ups), thank them warmly, briefly mention feedback is being prepared, and end the call.",
+    "",
+    "## Time",
+    "- Manage your pace so you finish all core questions and still close warmly within the time available.",
+    "- If you receive a system message beginning with '[director]', treat it as a private wrap cue: bring the current question to a close and move toward ending. Never read it aloud or mention it.",
+    "",
+    "## Ending",
+    "- When the final question is done (including any follow-ups), or on the wrap cue: thank the candidate warmly, briefly say their feedback is being prepared, and say goodbye.",
+    "- THEN immediately call the `end_interview` tool with a one-line reason ('completed' when the set is done, 'time' when wrapping for time).",
+    "- Do not keep talking after calling `end_interview`.",
     "",
     "## Question set (ask in this order)",
     list,
   ].join("\n");
 }
+
+// The natural-completion tool: the model calls this once, after saying goodbye,
+// to end the interview. The browser stops the call when it sees the call.
+const END_INTERVIEW_TOOL = {
+  type: "function",
+  function: {
+    name: "end_interview",
+    description: "Call this once, immediately after saying goodbye, to end the interview.",
+    parameters: {
+      type: "object",
+      properties: {
+        reason: { type: "string", enum: ["completed", "time"], description: "Why the interview ended." },
+      },
+      required: ["reason"],
+    },
+  },
+};
 
 export interface BuildAssistantArgs {
   interview: Interview;
@@ -102,6 +163,7 @@ export interface BuildAssistantArgs {
   languageLabel: string; // display label for the prompt
   attemptId: string;
   interviewerName: string;
+  persona: string; // voice-agent key, for the delivery cue
   candidateFirstName?: string;
 }
 
@@ -111,7 +173,7 @@ export interface BuildAssistantArgs {
  * serializes cleanly through the API route to the client.
  */
 export function buildAssistant(args: BuildAssistantArgs): Record<string, unknown> {
-  const { interview, voice, languageCode, languageLabel, attemptId, interviewerName, candidateFirstName } = args;
+  const { interview, voice, languageCode, languageLabel, attemptId, interviewerName, persona, candidateFirstName } = args;
   const questions = interview.questions ?? [];
   const greetName = candidateFirstName ? `, ${candidateFirstName}` : "";
 
@@ -122,7 +184,14 @@ export function buildAssistant(args: BuildAssistantArgs): Record<string, unknown
       provider: "openai",
       model: "gpt-4o",
       temperature: 0.6,
-      messages: [{ role: "system", content: systemPrompt(interview, questions, languageLabel) }],
+      messages: [
+        {
+          role: "system",
+          content: systemPrompt({ interview, questions, languageLabel, interviewerName, deliveryCue: DELIVERY_CUES[persona] ?? "" }),
+        },
+      ],
+      // Natural-completion path: the model ends the call via this tool.
+      tools: [END_INTERVIEW_TOOL],
     },
     voice: {
       provider: voice.provider,
@@ -130,6 +199,11 @@ export function buildAssistant(args: BuildAssistantArgs): Record<string, unknown
       model: voiceModelFor(languageCode),
     },
     transcriber: transcriberFor(languageCode),
+    // Don't talk over the candidate (see speakingPlans).
+    ...speakingPlans(languageCode),
+    // Hard time cap (the second completion path): end the call if it runs past
+    // the estimated length plus a small buffer, so it can't run unbounded.
+    maxDurationSeconds: Math.min(3600, Math.max(120, ((interview.minutes || 15) + 2) * 60)),
     // Audio only — we never send the candidate's camera to Vapi.
     metadata: { attemptId, interviewId: interview.id },
     server: {

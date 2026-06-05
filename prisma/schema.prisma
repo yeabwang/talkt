@@ -26,6 +26,8 @@ enum AttemptStatus {
   analyzing
   ready
   failed
+  // Candidate ended the call mid-interview — never graded, hidden from history.
+  abandoned
 }
 
 // Thin profile row keyed by Clerk user id.

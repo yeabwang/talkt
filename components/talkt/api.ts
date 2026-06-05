@@ -69,6 +69,8 @@ export interface CallSession {
   attemptId: string;
   publicKey: string;
   assistant: unknown;
+  // Resolved voice persona name, shown on the interviewer tile.
+  interviewerName: string;
 }
 
 /** Begin a call: resolves the voice agent, opens an attempt, returns the assistant. */
@@ -90,9 +92,18 @@ export async function attachCallId(attemptId: string, vapiCallId: string): Promi
   }).catch(() => {});
 }
 
+/** Flag an attempt abandoned (candidate ended mid-interview) so it's never graded. */
+export async function cancelAttempt(attemptId: string): Promise<void> {
+  await fetch(`/api/attempts/${attemptId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ abandon: true }),
+  }).catch(() => {});
+}
+
 /** Feedback shape returned by the attempt poller once analysis is ready. */
 export interface AttemptStatus {
-  status: "in_progress" | "analyzing" | "ready" | "failed";
+  status: "in_progress" | "analyzing" | "ready" | "failed" | "abandoned";
   overall?: number;
   summary?: string;
   dimensions?: { id: string; score: number; note: string }[];

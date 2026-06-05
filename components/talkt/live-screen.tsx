@@ -2,10 +2,49 @@
 
 import * as React from "react";
 
-import { attachCallId, type CallSession } from "@/components/talkt/api";
-import { interviewLanguage, type AppUser, type Interview } from "@/components/talkt/data";
+import { attachCallId, cancelAttempt, type CallSession } from "@/components/talkt/api";
+import { type AppUser, type Interview } from "@/components/talkt/data";
 import { useVapiCall } from "@/components/talkt/use-vapi-call";
 import { AgentAvatar, Avatar, Icon, Waveform, Wordmark } from "@/components/talkt/primitives";
+
+// Words too generic to identify which question is being asked. English-only, but
+// harmless for other languages (they just keep more tokens).
+const QUESTION_STOPWORDS = new Set([
+  "the", "and", "for", "you", "your", "what", "how", "why", "can", "could", "would", "tell", "about",
+  "give", "with", "that", "this", "please", "describe", "explain", "walk", "through", "have", "are",
+  "did", "does", "any", "his", "her", "their", "from", "into", "when", "where", "who", "which",
+]);
+
+// Significant tokens of a line, across scripts (keeps accents/non-latin).
+function sigWords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !QUESTION_STOPWORDS.has(w));
+}
+
+// How many core questions the interviewer has reached, in order. Advances only
+// when an assistant turn carries enough of the next question's keywords — so
+// follow-ups and acknowledgements don't push the bar, but moving to the next
+// question does. Paraphrase may delay a step (under-counts, never over-counts).
+function countQuestionsReached(assistantTexts: string[], questions: string[]): number {
+  if (!questions.length) return 0;
+  const qWords = questions.map(sigWords);
+  let reached = 0;
+  for (const text of assistantTexts) {
+    if (reached >= questions.length) break;
+    const target = qWords[reached];
+    if (!target.length) {
+      reached += 1;
+      continue;
+    }
+    const spoken = new Set(sigWords(text));
+    const hits = target.filter((w) => spoken.has(w)).length;
+    if (hits / target.length >= 0.5) reached += 1;
+  }
+  return reached;
+}
 
 export function LiveInterviewScreen({
   interview,
@@ -25,11 +64,11 @@ export function LiveInterviewScreen({
   const call = useVapiCall();
   const [elapsed, setElapsed] = React.useState(0);
   const [showTranscript, setShowTranscript] = React.useState(false);
-  const [captionsOn, setCaptionsOn] = React.useState(true);
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const startedRef = React.useRef(false);
 
-  const estTotal = Math.max(60, (interview.minutes || 15) * 60);
+  // Total core questions, for the question-driven progress bar.
+  const totalQuestions = interview.questions?.length || interview.count || 1;
 
   // Kick off the call once (StrictMode double-invoke guard).
   React.useEffect(() => {
@@ -65,39 +104,96 @@ export function LiveInterviewScreen({
     turnsRef.current = call.turns;
   }, [call.turns]);
 
+  // Closing countdown shown before handoff (null until the call ends naturally).
+  const [countdown, setCountdown] = React.useState<number | null>(null);
+
+  // Decide the closing path once the line drops, then drive it with a timer.
   const endedHandledRef = React.useRef(false);
   React.useEffect(() => {
     if (call.status !== "ended" || endedHandledRef.current) return;
     endedHandledRef.current = true;
-    // Don't yank to results the instant the line drops. Hold a brief graceful
-    // wrap so the end doesn't feel abrupt, and so any trailing *final* transcript
-    // turns (the interviewer's sign-off, the last answer) settle before handoff.
-    const timer = window.setTimeout(() => {
-      const transcript = turnsRef.current.map((t) => ({ role: t.role, text: t.text }));
-      onEnd(session.attemptId, transcript);
-    }, 1800);
-    return () => window.clearTimeout(timer);
-  }, [call.status, onEnd, session.attemptId]);
+
+    if (call.endedManually) {
+      // Candidate hung up mid-interview — never grade it. Flag it abandoned and
+      // bounce to the dashboard after a brief beat.
+      void cancelAttempt(session.attemptId);
+      const timer = window.setTimeout(onCancel, 1500);
+      return () => window.clearTimeout(timer);
+    }
+
+    // Natural (end_interview) or time-cap completion — a short visible countdown
+    // (3..2..1) instead of an abrupt cut, which also lets trailing *final* turns
+    // settle, then hand the transcript off to grading.
+    let remaining = 3;
+    const tick = window.setInterval(() => {
+      remaining -= 1;
+      setCountdown(remaining);
+      if (remaining <= 0) {
+        window.clearInterval(tick);
+        const transcript = turnsRef.current.map((t) => ({ role: t.role, text: t.text }));
+        onEnd(session.attemptId, transcript);
+      }
+    }, 1000);
+    return () => window.clearInterval(tick);
+  }, [call.status, call.endedManually, onCancel, onEnd, session.attemptId]);
 
   const aiSpeaking = call.assistantSpeaking;
   const youSpeaking = call.userSpeaking && !call.muted;
 
-  const lastAssistant = React.useMemo(() => {
-    for (let i = call.turns.length - 1; i >= 0; i -= 1) if (call.turns[i].role === "assistant") return call.turns[i].text;
-    return "";
+  // Settled turn-by-turn view: drop partials, merge consecutive same-speaker
+  // fragments so each turn is one block (no broken half-sentences).
+  const conversation = React.useMemo(() => {
+    const blocks: { role: "assistant" | "user"; text: string }[] = [];
+    for (const turn of call.turns) {
+      if (!turn.final || !turn.text.trim()) continue;
+      const last = blocks[blocks.length - 1];
+      if (last && last.role === turn.role) last.text = `${last.text} ${turn.text}`.trim();
+      else blocks.push({ role: turn.role, text: turn.text.trim() });
+    }
+    return blocks;
   }, [call.turns]);
 
-  const endCall = () => call.stop();
+  // Progress tracks how far through the question set the interviewer has gotten,
+  // not elapsed time (interviews finish well before the cap). Advances when the
+  // interviewer reaches the next core question — not on every user turn, which
+  // over-counted follow-ups and filled the bar on question one.
+  const reached = React.useMemo(
+    () => countQuestionsReached(conversation.filter((b) => b.role === "assistant").map((b) => b.text), interview.questions ?? []),
+    [conversation, interview.questions],
+  );
+  const progress = Math.min(100, (reached / totalQuestions) * 100);
+
+  // Keep the transcript pinned to the newest turn.
+  const transcriptEndRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    if (showTranscript) transcriptEndRef.current?.scrollIntoView({ block: "end" });
+  }, [conversation, showTranscript]);
+
+  const endCall = () => call.stop(true);
 
   if (call.status === "ended") {
     return (
       <div style={{ minHeight: "100vh", background: "var(--background)", display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
         <div className="text-center fade-in" style={{ maxWidth: 420 }}>
-          <Icon name="loader" size={26} className="spin" style={{ color: "var(--muted-foreground)" }} />
-          <h2 className="h2" style={{ margin: "16px 0 8px" }}>
-            Wrapping up your interview
-          </h2>
-          <p className="caption">Preparing your results…</p>
+          {call.endedManually ? (
+            <>
+              <Icon name="phone" size={26} style={{ color: "var(--muted-foreground)", transform: "rotate(135deg)" }} />
+              <h2 className="h2" style={{ margin: "16px 0 8px" }}>
+                Interview ended
+              </h2>
+              <p className="caption">You ended early — this attempt won&apos;t be scored.</p>
+            </>
+          ) : (
+            <>
+              <div className="stat-value" style={{ fontSize: 56, lineHeight: 1, color: "var(--foreground)" }}>
+                {Math.max(0, countdown ?? 3)}
+              </div>
+              <h2 className="h2" style={{ margin: "16px 0 8px" }}>
+                Wrapping up your interview
+              </h2>
+              <p className="caption">Preparing your results…</p>
+            </>
+          )}
         </div>
       </div>
     );
@@ -134,21 +230,12 @@ export function LiveInterviewScreen({
           <span className="mono" style={{ fontSize: 13, color: "var(--foreground)" }}>
             {fmt(elapsed)}
           </span>
-          <button
-            type="button"
-            onClick={() => setShowTranscript((shown) => !shown)}
-            className="icon-btn"
-            aria-label="Transcript"
-            aria-expanded={showTranscript}
-            style={{ width: 34, height: 34, background: showTranscript ? "var(--card)" : undefined, borderColor: showTranscript ? "var(--border-hover)" : undefined }}
-          >
-            <Icon name="list" size={16} />
-          </button>
         </div>
       </div>
 
+      {/* Question-driven progress (see `progress`). */}
       <div style={{ height: 2, background: "var(--border)" }}>
-        <div style={{ height: "100%", width: `${Math.min(100, (elapsed / estTotal) * 100)}%`, background: "var(--foreground)", transition: "width var(--dur-base) var(--ease-out)" }} />
+        <div style={{ height: "100%", width: `${progress}%`, background: "var(--foreground)", transition: "width var(--dur-base) var(--ease-out)" }} />
       </div>
 
       {call.status === "active" && call.noInputDetected ? (
@@ -170,9 +257,8 @@ export function LiveInterviewScreen({
             <Tile
               active={aiSpeaking}
               speaking={aiSpeaking}
-              name="Interviewer"
-              sub="TalkT"
-              status={call.status === "connecting" ? "Connecting" : aiSpeaking ? "Speaking" : "Listening"}
+              name={session.interviewerName || "Interviewer"}
+              sub="Interviewer"
               avatar={<AgentAvatar size={96} active={aiSpeaking} />}
             />
             <Tile
@@ -181,48 +267,36 @@ export function LiveInterviewScreen({
               muted={call.muted}
               name={user.name}
               sub="You"
-              status={call.muted ? "Muted" : youSpeaking ? "Speaking" : "Ready"}
-              avatar={camStream ? <SelfView videoRef={videoRef} /> : <Avatar name={user.name} size={96} />}
+              avatar={camStream ? <SelfView videoRef={videoRef} /> : <Avatar name={user.name} src={user.image} size={96} />}
             />
           </div>
-
-          {captionsOn ? (
-            <div className="text-center" style={{ maxWidth: 760, width: "100%" }}>
-              <div className="flex items-center justify-center gap-3" style={{ marginBottom: 16 }}>
-                <span className="mono-label">{aiSpeaking ? "Interviewer" : youSpeaking ? "You" : "Live"}</span>
-              </div>
-              <p style={{ fontSize: "clamp(16px, 1.9vw, 20px)", fontWeight: 500, letterSpacing: "-0.01em", lineHeight: 1.4, minHeight: 40, margin: 0 }}>
-                {lastAssistant || (call.status === "connecting" ? "Connecting…" : "Listening…")}
-                {aiSpeaking ? <span className="cursor-blink" /> : null}
-              </p>
-            </div>
-          ) : null}
         </div>
 
         {showTranscript ? (
-          <aside className="fade-in no-scrollbar" style={{ width: 320, borderLeft: "1px solid var(--border)", background: "var(--sidebar)", overflowY: "auto", padding: "18px 20px" }}>
+          <aside className="fade-in no-scrollbar" style={{ width: 320, minHeight: 0, borderLeft: "1px solid var(--border)", background: "var(--sidebar)", overflowY: "auto", padding: "18px 20px" }}>
             <div className="flex items-center justify-between" style={{ marginBottom: 18 }}>
               <span className="mono-label">Transcript</span>
               <button type="button" onClick={() => setShowTranscript(false)} className="icon-btn" style={{ width: 30, height: 30, border: 0 }} aria-label="Close transcript">
                 <Icon name="x" size={15} />
               </button>
             </div>
-            {call.turns.length ? (
+            {conversation.length ? (
               <div className="flex-col" style={{ display: "flex", gap: 16 }}>
-                {call.turns.map((turn, index) => (
+                {conversation.map((turn, index) => (
                   <div key={index}>
                     <div className="mono" style={{ fontSize: 11, color: turn.role === "assistant" ? "var(--muted-foreground)" : "var(--dimmed)" }}>
-                      {turn.role === "assistant" ? "Interviewer" : user.name}
+                      {turn.role === "assistant" ? session.interviewerName || "Interviewer" : user.name}
                     </div>
                     <p className="caption" style={{ margin: "3px 0 0", color: "var(--foreground)" }}>
                       {turn.text}
                     </p>
                   </div>
                 ))}
+                <div ref={transcriptEndRef} />
               </div>
             ) : (
               <p className="caption" style={{ margin: 0 }}>
-                The conversation transcript appears here as you talk.
+                The conversation transcript appears here, turn by turn, as you talk.
               </p>
             )}
           </aside>
@@ -230,14 +304,8 @@ export function LiveInterviewScreen({
       </div>
 
       <div className="flex items-center justify-center" style={{ padding: "16px 24px", borderTop: "1px solid var(--border)", gap: 12, position: "relative" }}>
-        <div className="flex items-center gap-2" style={{ position: "absolute", left: 26 }}>
-          <span className="mono" style={{ fontSize: 11, color: "var(--foreground)" }}>
-            {interviewLanguage(interview)}
-          </span>
-        </div>
-
         <CtrlBtn icon={call.muted ? "mic-off" : "mic"} on={!call.muted} danger={call.muted} onClick={call.toggleMute} label="Toggle mic" />
-        <CtrlBtn icon="captions" on={captionsOn} onClick={() => setCaptionsOn((value) => !value)} label={captionsOn ? "Hide captions" : "Show captions"} />
+        <CtrlBtn icon="captions" on={showTranscript} onClick={() => setShowTranscript((value) => !value)} label={showTranscript ? "Hide transcript" : "Show transcript"} />
         <button className="btn btn-danger" type="button" onClick={endCall} style={{ width: 58, height: 48, padding: 0 }} aria-label="End call">
           <Icon name="phone" size={20} style={{ transform: "rotate(135deg)" }} />
         </button>
@@ -275,7 +343,6 @@ function Tile({
   speaking,
   name,
   sub,
-  status,
   avatar,
   muted,
 }: {
@@ -283,7 +350,6 @@ function Tile({
   speaking: boolean;
   name: string;
   sub: string;
-  status: string;
   avatar: React.ReactNode;
   muted?: boolean;
 }) {
@@ -326,11 +392,6 @@ function Tile({
         </span>
         <span className="mono" style={{ fontSize: 10, color: "var(--on-tile)", opacity: 0.5 }}>
           {sub}
-        </span>
-      </div>
-      <div className="relative" style={{ position: "absolute", bottom: 14, right: 16 }}>
-        <span className="mono" style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: active ? "var(--on-tile)" : "var(--dimmed)" }}>
-          {status}
         </span>
       </div>
     </div>

@@ -64,6 +64,29 @@ export async function findOwnedAttempt(
   return { id: row.id, status: row.status, interview: toTemplateDTO(row.interview as InterviewRow) };
 }
 
+/**
+ * Mark an attempt abandoned: the candidate ended the call mid-interview, so it is
+ * never graded and stays out of history. Scoped to the owner and only flips an
+ * `in_progress` row so a completed/graded attempt is never clobbered by a late call.
+ */
+export async function abandonAttempt(attemptId: string, userId: string): Promise<void> {
+  await prisma.attempt.updateMany({
+    where: { id: attemptId, userId, status: "in_progress" },
+    data: { status: "abandoned", endedAt: new Date() },
+  });
+}
+
+/**
+ * Webhook-trusted abandon: flag an `in_progress` attempt abandoned without an
+ * owner scope (the webhook has no user). Used when the end-of-call report shows
+ * the candidate ended mid-interview (no end_interview / completion signal).
+ */
+export async function markAbandoned(attemptId: string): Promise<void> {
+  await prisma.attempt
+    .updateMany({ where: { id: attemptId, status: "in_progress" }, data: { status: "abandoned", endedAt: new Date() } })
+    .catch(() => {});
+}
+
 /** Move an attempt to `analyzing` and stamp the end time. */
 export async function markAnalyzing(attemptId: string): Promise<void> {
   await prisma.attempt.update({
@@ -113,7 +136,7 @@ export async function markFailed(attemptId: string): Promise<void> {
 
 /** UI feedback shape (components/talkt/data.ts Feedback), returned to the results poller. */
 export interface AttemptStatusResult {
-  status: "in_progress" | "analyzing" | "ready" | "failed";
+  status: "in_progress" | "analyzing" | "ready" | "failed" | "abandoned";
   overall?: number;
   summary?: string;
   dimensions?: { id: string; score: number; note: string }[];

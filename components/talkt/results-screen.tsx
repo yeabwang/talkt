@@ -7,6 +7,7 @@ import { fetchAttemptStatus, gradeAttempt, type AttemptStatus } from "@/componen
 import { DIMENSIONS, type Attempt, type Feedback, type FeedbackEvidence, type Interview, type QuestionFeedback } from "@/components/talkt/data";
 import type { TalkTRoute } from "@/components/talkt/app-shell";
 import { Icon, ScoreBar, ScoreRing, SectionHeader, TalkTButton, scoreColorVar } from "@/components/talkt/primitives";
+import { ReportSkeleton } from "@/components/talkt/skeletons";
 import type { GradeStep, gradeAttempt as gradeAttemptTask } from "@/trigger/grade-attempt";
 
 // The progress steps shown while grading runs. Driven by the task's streamed
@@ -214,7 +215,7 @@ function LiveResults({
           setFeedback(toFeedback(status));
           return;
         }
-        if (status.status === "failed") {
+        if (status.status === "failed" || status.status === "abandoned") {
           setFailed(true);
           return;
         }
@@ -237,7 +238,9 @@ function LiveResults({
   }, [attemptId]);
 
   if (failed) return <ScoringFailed interview={interview} navigate={navigate} startInterview={startInterview} />;
-  if (!feedback) return <Analyzing />;
+  // A stored report is already graded — show the calm app skeleton while it
+  // loads, not the live grading-steps screen (that's only for fresh scoring).
+  if (!feedback) return <ReportSkeleton />;
   return <FeedbackReady interview={interview} attempt={null} feedback={feedback} navigate={navigate} startInterview={startInterview} />;
 }
 

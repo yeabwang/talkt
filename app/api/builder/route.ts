@@ -61,7 +61,7 @@ You MUST reply with a single strict JSON object and NOTHING else, matching exact
     "difficulty": string,                        // e.g. Entry level, Mid, Senior, All levels
     "blurb": string,                             // ONE concise sentence describing what this interview practices (shown on its card)
     "focus": string[],                           // themes the interview leans on
-    "minutes": number,                           // estimated duration; 0 until known
+    "minutes": number,                           // est. duration: 1.5-2 min per question (≈ round(count * 1.75)); 0 until known
     "count": number                              // number of questions; 0 until known
   },
   "ready": boolean,                              // true ONLY on the final turn, when questions are generated
@@ -73,7 +73,7 @@ RULES:
 - Use "single" for mutually exclusive choices (level, length). Use "multi" for themes/focus the user can combine.
 - Disable suggestions (suggestions_enabled=false, type=null, suggestions=[]) when a free-text answer fits better, e.g. the opening role question.
 - Keep building summary as you learn more; never blank out a field you already know.
-- When you have enough (role, level, focus, length), set ready=true and produce: a tuned, ordered question set spoken aloud in an interview (count questions, no numbering in the text), an honest minutes estimate, a fitting category, a polished one-sentence "blurb" describing the interview, and 4-6 dimensions — the core grading criteria for THIS interview (key is a lowercase slug, label is human-readable in ${language}).
+- When you have enough (role, level, focus, length), set ready=true and produce: a tuned, ordered question set spoken aloud in an interview (count questions, no numbering in the text), a minutes estimate budgeting 1.5-2 minutes per question including follow-ups (so minutes ≈ round(count * 1.75)), a fitting category, a polished one-sentence "blurb" describing the interview, and 4-6 dimensions — the core grading criteria for THIS interview (key is a lowercase slug, label is human-readable in ${language}).
 - On the ready turn, response_text should warmly hand off ("Here's your set — start when you're ready."), and suggestions_enabled should be false.
 - Output ONLY the JSON object. No markdown, no commentary.`;
 
@@ -132,6 +132,15 @@ function normalizeTurn(raw: Partial<BuilderTurn>): BuilderTurn {
     .slice(0, 6);
   if (ready && dimensions.length < 4) dimensions = DEFAULT_DIMENSIONS;
 
+  // Enforce the 1.5-2 min/question budget on the final set, regardless of what
+  // the model guessed (estimates used to run wildly long vs. real call length).
+  let minutes = clampNum(summaryIn.minutes, 0, 120);
+  if (ready) {
+    const lo = Math.ceil(questions.length * 1.5);
+    const hi = Math.ceil(questions.length * 2);
+    if (minutes < lo || minutes > hi) minutes = Math.round(questions.length * 1.75);
+  }
+
   return {
     response_text: typeof raw.response_text === "string" ? raw.response_text : "",
     suggestions_enabled: suggestionsEnabled,
@@ -144,7 +153,7 @@ function normalizeTurn(raw: Partial<BuilderTurn>): BuilderTurn {
       difficulty: str(summaryIn.difficulty),
       blurb: str(summaryIn.blurb),
       focus: strList(summaryIn.focus).slice(0, 6),
-      minutes: clampNum(summaryIn.minutes, 0, 120),
+      minutes,
       count: ready ? questions.length : clampNum(summaryIn.count, 0, 30),
     },
     ready,
