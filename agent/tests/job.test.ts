@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { endReasonSchema, parseJob } from "../src/job";
+import { endReasonSchema, parseJob } from "../src/job.js";
 
 const valid = {
   attemptId: "att_123",
@@ -23,13 +23,15 @@ describe("parseJob", () => {
   });
 
   it("treats candidateFirstName as optional", () => {
-    const { candidateFirstName, ...rest } = valid;
+    const rest: Partial<typeof valid> = { ...valid };
+    delete rest.candidateFirstName;
     const job = parseJob(JSON.stringify(rest));
     expect(job.candidateFirstName).toBeUndefined();
   });
 
   it("rejects missing attemptId", () => {
-    const { attemptId, ...rest } = valid;
+    const rest: Partial<typeof valid> = { ...valid };
+    delete rest.attemptId;
     expect(() => parseJob(JSON.stringify(rest))).toThrow(/Invalid job metadata/);
   });
 

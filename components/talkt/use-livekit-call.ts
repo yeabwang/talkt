@@ -1,8 +1,7 @@
 "use client";
 
-// React hook around `livekit-client` for a single interview call. Replaces the
-// old Vapi Web SDK hook (spec 17) but keeps the exact surface `live-screen.tsx`
-// consumes, so the live UI is unchanged.
+// React hook around `livekit-client` for a single interview call. It keeps the
+// compact surface `live-screen.tsx` consumes.
 //
 // The candidate joins the room minted server-side (spec 16) with a token that
 // also dispatches the interviewer worker (spec 15). We publish the mic, play the
@@ -26,8 +25,8 @@ const TRANSCRIPTION_TOPIC = "lk.transcription";
 // ── Pure helpers (unit-tested in tests/unit/livekit-call.test.ts) ──────────
 
 /**
- * Append a final turn, or replace the trailing partial for the same role. Ported
- * verbatim from the Vapi hook — the transcript-drawer merge UI depends on it.
+ * Append a final turn, or replace the trailing partial for the same role. The
+ * transcript drawer depends on this stable merge behavior.
  */
 export function mergeTurn(turns: TranscriptTurn[], role: "assistant" | "user", text: string, final: boolean): TranscriptTurn[] {
   const next = [...turns];
@@ -58,8 +57,7 @@ export function isFinalTranscript(attributes: Record<string, string> | undefined
  * Map a `Disconnected` event to a status. After a successful connect, any
  * disconnect is a normal end (the worker closed the session / the agent left, or
  * the candidate hit End) — never the connect-failed screen. A disconnect before
- * connect is a genuine failure. LiveKit surfaces typed disconnects, so we don't
- * string-match benign-end patterns the way the Vapi hook had to.
+ * connect is a genuine failure.
  */
 export function disconnectStatus(connected: boolean): CallStatus {
   return connected ? "ended" : "error";

@@ -7,8 +7,9 @@
 import { inference, initializeLogger, voice } from "@livekit/agents";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { type EndReason, InterviewerAgent } from "../src/interviewer";
-import type { InterviewJob } from "../src/job";
+import { type EndReason, InterviewerAgent } from "../src/interviewer.js";
+import type { InterviewJob } from "../src/job.js";
+import { resolveLlmModel } from "../src/model-config.js";
 
 const live = Boolean(process.env.LIVEKIT_URL && process.env.LIVEKIT_API_KEY);
 
@@ -34,8 +35,7 @@ describe.runIf(live)("InterviewerAgent (judged)", () => {
   let endReason: EndReason | null;
 
   beforeEach(async () => {
-    // [VERIFY] model id against docs.livekit.io at run time.
-    llm = new inference.LLM({ model: "openai/gpt-5.3-chat-latest" });
+    llm = new inference.LLM({ model: resolveLlmModel() });
     session = new voice.AgentSession({ llm });
     endReason = null;
     const agent = new InterviewerAgent(job, async (reason) => {

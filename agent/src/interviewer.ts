@@ -6,8 +6,8 @@
 import { llm, voice } from "@livekit/agents";
 import { z } from "zod";
 
-import { type EndReason, endReasonSchema, type InterviewJob } from "./job";
-import { systemPrompt } from "./prompt";
+import { type EndReason, endReasonSchema, type InterviewJob } from "./job.js";
+import { systemPrompt } from "./prompt.js";
 
 export type { EndReason };
 

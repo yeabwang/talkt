@@ -3,7 +3,7 @@
 // internal endpoint (spec 18), which makes the completed-vs-abandoned grading
 // decision. The endpoint is idempotent, so retries and the close/shutdown
 // double-fire are harmless.
-import type { Turn } from "./transcript";
+import type { Turn } from "./transcript.js";
 
 export type Outcome = "completed" | "abandoned";
 

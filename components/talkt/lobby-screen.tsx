@@ -33,7 +33,7 @@ export function LobbyScreen({
 
   // Ask for microphone authorization up front so the permission prompt isn't a
   // surprise mid-join. We only need the grant; the preview stream is released
-  // immediately so it doesn't hold the device while Vapi acquires it.
+  // immediately so the LiveKit room can acquire the device during join.
   React.useEffect(() => {
     let cancelled = false;
     navigator.mediaDevices

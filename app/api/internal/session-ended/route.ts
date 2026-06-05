@@ -2,9 +2,8 @@
 //
 // The worker produces the authoritative transcript and classifies the call, so
 // the completed-vs-abandoned decision and the grade trigger now live here. This
-// single endpoint replaces both the Vapi `end-of-call-report` webhook and the
-// old client `POST /api/attempts/[id]/grade` path — eliminating the
-// webhook-vs-client race and the endedReason/end_interview heuristics.
+// endpoint is the only grade trigger, eliminating client/server races and
+// provider-specific end-reason heuristics.
 //
 // Idempotent by design: the worker fires this from both the session `close` event
 // and an `addShutdownCallback` backstop, and retries on 5xx. Unknown / already-

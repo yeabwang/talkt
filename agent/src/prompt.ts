@@ -1,12 +1,10 @@
-// Interviewer prompt — ported verbatim from lib/vapi.ts (systemPrompt /
-// DELIVERY_CUES / firstMessage). Pure functions, no LiveKit imports.
+// Interviewer prompt. Pure functions, no LiveKit imports.
 //
-// The product-critical rules (never reveal answers, one question at a time,
-// neutral acknowledgements, =<2 follow-ups, stay in character) are unchanged.
-// The only Vapi-specific mechanism dropped is the `[director]` private wrap cue:
-// the worker now enforces the time cap directly (interviewer.ts / index.ts),
-// injecting a private generateReply wrap instruction instead of a system message.
-import type { InterviewJob } from "./job";
+// The product-critical rules are: never reveal answers, ask one question at a
+// time, give neutral acknowledgements, use at most two follow-ups, and stay in
+// character. The worker enforces the time cap directly and injects a private
+// wrap instruction when needed.
+import type { InterviewJob } from "./job.js";
 
 // Per-persona spoken delivery cue, keyed by voice-agent key. Steers cadence/tone
 // to match the chosen voice; empty for unknown personas.

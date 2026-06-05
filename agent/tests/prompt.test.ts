@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { InterviewJob } from "../src/job";
-import { DELIVERY_CUES, firstMessage, systemPrompt } from "../src/prompt";
+import type { InterviewJob } from "../src/job.js";
+import { DELIVERY_CUES, firstMessage, systemPrompt } from "../src/prompt.js";
 
 const base: InterviewJob = {
   attemptId: "att_1",
@@ -39,7 +39,7 @@ describe("systemPrompt", () => {
     expect(p).toContain("end_interview");
   });
 
-  it("drops the Vapi [director] cue mechanism", () => {
+  it("does not expose private wrap cues", () => {
     expect(systemPrompt(base)).not.toContain("[director]");
   });
 });

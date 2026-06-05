@@ -1,8 +1,7 @@
-// Server-only LiveKit token + agent-dispatch minting. Replaces the Vapi
-// "build a transient assistant" start path: mint a short-lived room join token
-// for the candidate and ride token-based agent dispatch (RoomConfiguration +
-// RoomAgentDispatch) so the interviewer worker (spec 15) is dispatched into the
-// room the moment the browser creates it.
+// Server-only LiveKit token + agent-dispatch minting. The candidate receives a
+// short-lived room join token; token-based agent dispatch (RoomConfiguration +
+// RoomAgentDispatch) sends the interviewer worker (spec 15) into the room the
+// moment the browser creates it.
 //
 // Never import from a client component (uses LIVEKIT_API_SECRET).
 import { AccessToken, RoomAgentDispatch, RoomConfiguration } from "livekit-server-sdk";

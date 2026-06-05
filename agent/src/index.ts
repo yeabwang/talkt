@@ -16,12 +16,12 @@ import * as livekit from "@livekit/agents-plugin-livekit";
 import * as silero from "@livekit/agents-plugin-silero";
 import { fileURLToPath } from "node:url";
 
-import { postSessionEnded, type Outcome } from "./callback";
-import { type EndReason, InterviewerAgent } from "./interviewer";
-import { parseJob } from "./job";
-import { firstMessage } from "./prompt";
-import { historyToTurns } from "./transcript";
-import { selectVoice } from "./voices";
+import { postSessionEnded, type Outcome } from "./callback.js";
+import { type EndReason, InterviewerAgent } from "./interviewer.js";
+import { parseJob } from "./job.js";
+import { resolveAgentModelConfig } from "./model-config.js";
+import { firstMessage } from "./prompt.js";
+import { historyToTurns } from "./transcript.js";
 
 // SpeechHandle exposes waitForPlayout(); typed loosely so the wrap path can await
 // the goodbye finishing before we close, without depending on its exact type.
@@ -58,24 +58,20 @@ export default defineAgent({
 
     // Declared up front so the close handler (which may fire before the cap is
     // armed, e.g. an immediate disconnect) can clear it without a TDZ error.
-    let capTimer: ReturnType<typeof setTimeout> | undefined;
+    const capTimer: { current?: ReturnType<typeof setTimeout> } = {};
 
     const vad = ctx.proc.userData.vad as silero.VAD;
-    // Voice is selected by language + persona (agent/src/voices.ts), not hardcoded;
-    // the language hint makes the multilingual voice speak the interview language.
-    const ttsVoice = selectVoice(job.persona, job.languageCode);
+    const models = resolveAgentModelConfig({ persona: job.persona, languageCode: job.languageCode });
     const session = new voice.AgentSession({
       vad,
-      // [VERIFY] Inference model ids (docs.livekit.io, 2026-06-05). nova-3 has the
-      // widest language coverage; English uses the en model, others go multilingual.
       stt: new inference.STT({
-        model: "deepgram/nova-3",
-        language: job.languageCode === "en" ? "en" : "multi",
+        model: models.stt.model,
+        language: models.stt.language,
       }),
-      llm: new inference.LLM({ model: "openai/gpt-5.3-chat-latest" }),
-      tts: new inference.TTS({ model: ttsVoice.model, voice: ttsVoice.voice, language: ttsVoice.language }),
-      // Replaces Vapi's speakingPlans: the turn-detection model decides end-of-turn
-      // so the interviewer doesn't talk over the candidate.
+      llm: new inference.LLM({ model: models.llm.model }),
+      tts: new inference.TTS({ model: models.tts.model, voice: models.tts.voice, language: models.tts.language }),
+      // The turn-detection model decides end-of-turn so the interviewer doesn't
+      // talk over the candidate.
       turnHandling: { turnDetection: new livekit.turnDetector.MultilingualModel() },
     });
 
@@ -95,7 +91,7 @@ export default defineAgent({
     const finalize = async (): Promise<void> => {
       if (posted) return;
       posted = true;
-      if (capTimer) clearTimeout(capTimer);
+      if (capTimer.current) clearTimeout(capTimer.current);
       const transcript = historyToTurns(session);
       const outcome: Outcome = control.reason ? "completed" : "abandoned";
       try {
@@ -125,7 +121,7 @@ export default defineAgent({
     session.say(firstMessage(job));
 
     // Hard time cap (the second completion path): warmly wrap, then close as time.
-    capTimer = setTimeout(async () => {
+    capTimer.current = setTimeout(async () => {
       if (control.ended) return;
       const handle = session.generateReply({ instructions: "Wrap up warmly now and say goodbye." });
       await waitForPlayout(handle);
