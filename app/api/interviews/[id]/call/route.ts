@@ -1,7 +1,9 @@
 // POST /api/interviews/[id]/call — begin a call.
-// Resolves a live interviewer voice (availability-checked, swapped if dead),
-// opens an Attempt row, and returns the transient assistant config the browser
-// hands to the Vapi Web SDK. The webhook later joins back via metadata.attemptId.
+// Resolves the interviewer persona, opens an Attempt row, and mints a LiveKit
+// session: a short-lived room-join token plus token-based dispatch of the
+// `talkt-interviewer` worker (spec 15) into a deterministic per-attempt room.
+// The browser (spec 17) joins the room with this token; the worker conducts the
+// interview and POSTs the transcript back via /api/internal/session-ended.
 import { auth, currentUser } from "@clerk/nextjs/server";
 import type { NextRequest } from "next/server";
 
@@ -11,11 +13,12 @@ import { getInterview } from "@/lib/db/interviews";
 import { ensureUser } from "@/lib/db/users";
 import { resolveVoiceAgent } from "@/lib/db/voice-agents";
 import { toLanguageCode } from "@/lib/language";
-import { buildAssistant } from "@/lib/vapi";
+import { buildInterviewJob } from "@/lib/livekit/job";
+import { mintCallToken } from "@/lib/livekit/token";
 import { createRateLimiter } from "@/lib/rate-limit";
 
-// Starting a call provisions a Vapi assistant + opens an Attempt row. 10/min/user
-// is well above real use and blocks rapid-fire abuse.
+// Starting a call dispatches a worker + opens an Attempt row. 10/min/user is well
+// above real use and blocks rapid-fire abuse.
 const callLimiter = createRateLimiter({ limit: 10, windowMs: 60_000 });
 
 export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -34,22 +37,28 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
   const voice = await resolveVoiceAgent(interview.voice);
   const attemptId = await createAttempt(userId, interview.id);
 
+  // Deterministic room name — no DB round trip to reconstruct it later; the
+  // attemptId is also the authoritative key carried in the dispatch metadata.
+  const roomName = `attempt_${attemptId}`;
+
   const clerk = await currentUser();
-  const assistant = buildAssistant({
+  const job = buildInterviewJob({
     interview,
-    voice: { provider: voice.provider, voiceId: voice.voiceId },
+    persona: { key: voice.key, name: voice.name },
     languageCode: toLanguageCode(interview.language),
     languageLabel: interview.language ?? "English",
     attemptId,
     interviewerName: voice.name,
-    persona: voice.key,
     candidateFirstName: clerk?.firstName ?? undefined,
   });
 
+  const { token, serverUrl } = await mintCallToken({ userId, roomName, job });
+
   return Response.json({
     attemptId,
-    publicKey: process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY ?? "",
-    assistant,
+    serverUrl,
+    token,
+    roomName,
     interviewerName: voice.name,
   });
 }

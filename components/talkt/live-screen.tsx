@@ -2,9 +2,9 @@
 
 import * as React from "react";
 
-import { attachCallId, cancelAttempt, type CallSession } from "@/components/talkt/api";
+import { cancelAttempt, type CallSession } from "@/components/talkt/api";
 import { type AppUser, type Interview } from "@/components/talkt/data";
-import { useVapiCall } from "@/components/talkt/use-vapi-call";
+import { useLiveKitCall } from "@/components/talkt/use-livekit-call";
 import { AgentAvatar, Avatar, Icon, Waveform, Wordmark } from "@/components/talkt/primitives";
 
 // Words too generic to identify which question is being asked. English-only, but
@@ -58,10 +58,12 @@ export function LiveInterviewScreen({
   user: AppUser;
   session: CallSession;
   camStream: MediaStream | null;
-  onEnd: (attemptId: string, transcript: { role: string; text: string }[]) => void;
+  // Grading is server-driven now (the worker owns the transcript), so end only
+  // carries the attempt id — the results screen polls its status.
+  onEnd: (attemptId: string) => void;
   onCancel: () => void;
 }) {
-  const call = useVapiCall();
+  const call = useLiveKitCall();
   const [elapsed, setElapsed] = React.useState(0);
   const [showTranscript, setShowTranscript] = React.useState(false);
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
@@ -70,17 +72,13 @@ export function LiveInterviewScreen({
   // Total core questions, for the question-driven progress bar.
   const totalQuestions = interview.questions?.length || interview.count || 1;
 
-  // Kick off the call once (StrictMode double-invoke guard).
+  // Kick off the call once (StrictMode double-invoke guard). Joins the room
+  // minted server-side; the worker is dispatched into it by the same token.
   React.useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
-    void call.start(session.publicKey, session.assistant);
+    void call.start(session.serverUrl, session.token);
   }, [call, session]);
-
-  // Persist the Vapi call id as a defensive webhook join key.
-  React.useEffect(() => {
-    if (call.callId) void attachCallId(session.attemptId, call.callId);
-  }, [call.callId, session.attemptId]);
 
   // Attach + tear down the local self-view stream owned by this screen.
   React.useEffect(() => {
@@ -96,13 +94,6 @@ export function LiveInterviewScreen({
     const timer = window.setInterval(() => setElapsed((v) => v + 1), 1000);
     return () => window.clearInterval(timer);
   }, [call.status]);
-
-  // Natural or user-initiated end -> hand the attempt + captured transcript to
-  // the results screen, which grades it in one call (no poll loop / webhook wait).
-  const turnsRef = React.useRef(call.turns);
-  React.useEffect(() => {
-    turnsRef.current = call.turns;
-  }, [call.turns]);
 
   // Closing countdown shown before handoff (null until the call ends naturally).
   const [countdown, setCountdown] = React.useState<number | null>(null);
@@ -122,16 +113,15 @@ export function LiveInterviewScreen({
     }
 
     // Natural (end_interview) or time-cap completion — a short visible countdown
-    // (3..2..1) instead of an abrupt cut, which also lets trailing *final* turns
-    // settle, then hand the transcript off to grading.
+    // (3..2..1) instead of an abrupt cut, then route to results (which polls the
+    // server-graded status; the worker already owns the transcript).
     let remaining = 3;
     const tick = window.setInterval(() => {
       remaining -= 1;
       setCountdown(remaining);
       if (remaining <= 0) {
         window.clearInterval(tick);
-        const transcript = turnsRef.current.map((t) => ({ role: t.role, text: t.text }));
-        onEnd(session.attemptId, transcript);
+        onEnd(session.attemptId);
       }
     }, 1000);
     return () => window.clearInterval(tick);

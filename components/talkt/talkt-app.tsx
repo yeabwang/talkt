@@ -257,7 +257,7 @@ export function TalkTApp() {
         user={user}
         session={session}
         camStream={camStream}
-        onEnd={(attemptId, transcript) => navigate("results", { interview: active, attemptId, transcript })}
+        onEnd={(attemptId) => navigate("results", { interview: active, attemptId })}
         onCancel={() => navigate("dashboard")}
       />
     );

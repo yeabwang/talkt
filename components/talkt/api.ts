@@ -62,18 +62,23 @@ export async function persistBuiltInterview(payload: BuiltInterviewPayload): Pro
   return data.interview;
 }
 
-// ── Voice call (Vapi) ────────────────────────────────────────────────
+// ── Voice call (LiveKit) ─────────────────────────────────────────────
 
-/** Server-resolved call session: the attempt + the transient assistant config. */
+/**
+ * Server-resolved call session: the attempt plus the LiveKit join details. The
+ * browser (spec 17) connects to `serverUrl` with `token`; the interviewer worker
+ * is dispatched into `roomName` by the same token.
+ */
 export interface CallSession {
   attemptId: string;
-  publicKey: string;
-  assistant: unknown;
+  serverUrl: string; // LIVEKIT_URL the browser dials
+  token: string; // short-lived room-join JWT
+  roomName: string; // deterministic "attempt_<id>"
   // Resolved voice persona name, shown on the interviewer tile.
   interviewerName: string;
 }
 
-/** Begin a call: resolves the voice agent, opens an attempt, returns the assistant. */
+/** Begin a call: resolves the persona, opens an attempt, returns the LiveKit session. */
 export async function startCall(interviewId: string): Promise<CallSession> {
   const res = await fetch(`/api/interviews/${interviewId}/call`, {
     method: "POST",
@@ -81,15 +86,6 @@ export async function startCall(interviewId: string): Promise<CallSession> {
   });
   if (!res.ok) return asError(res);
   return (await res.json()) as CallSession;
-}
-
-/** Attach the live Vapi call id to the attempt (defensive webhook join key). */
-export async function attachCallId(attemptId: string, vapiCallId: string): Promise<void> {
-  await fetch(`/api/attempts/${attemptId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ vapiCallId }),
-  }).catch(() => {});
 }
 
 /** Flag an attempt abandoned (candidate ended mid-interview) so it's never graded. */
