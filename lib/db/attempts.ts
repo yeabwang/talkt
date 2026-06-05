@@ -1,8 +1,8 @@
 // Attempt repository. The directory's recommendation profile is derived from a
 // user's attempt history (which interviews, what level, what language). Also the
-// call lifecycle: create on start, attach the Vapi call id, then move
-// in_progress -> analyzing -> ready (or failed) as the webhook processes the
-// transcript and writes Feedback.
+// call lifecycle: create on start (stamped with the deterministic room name),
+// then move in_progress -> analyzing -> ready (or failed) as the worker's
+// session-ended callback drives grading and writes Feedback.
 import type { Interview as UiInterview } from "@/components/talkt/data";
 import type { AnalysisResult } from "@/lib/analysis";
 import { interviewRowSelect, toTemplateDTO, type InterviewRow } from "@/lib/dto";
@@ -10,34 +10,34 @@ import { prisma } from "@/lib/prisma";
 import { toLanguageLabel } from "@/lib/language";
 import type { AttemptFacets } from "@/lib/recommend";
 
-/** Start an attempt row for a user taking an interview (status: in_progress). */
+/**
+ * Start an attempt row for a user taking an interview (status: in_progress) and
+ * stamp it with its deterministic LiveKit room name, which is also the worker's
+ * dispatch key and a defensive secondary lookup for the session-ended callback.
+ */
 export async function createAttempt(userId: string, interviewId: string): Promise<string> {
   const attempt = await prisma.attempt.create({
     data: { userId, interviewId },
     select: { id: true },
   });
+  await prisma.attempt.update({
+    where: { id: attempt.id },
+    data: { roomName: `attempt_${attempt.id}` },
+  });
   return attempt.id;
 }
 
-/** Attach the Vapi call id once the browser reports the call has started. */
-export async function attachCallId(attemptId: string, userId: string, vapiCallId: string): Promise<void> {
-  // Scope to the owner so a leaked attempt id can't be hijacked.
-  await prisma.attempt.updateMany({
-    where: { id: attemptId, userId },
-    data: { vapiCallId },
-  });
-}
-
 /**
- * Resolve the attempt a webhook refers to — by metadata attemptId first, then by
- * the Vapi call id — and return it with its interview mapped to the UI shape the
- * analyzer consumes. Returns null when no match (or already terminal).
+ * Resolve the attempt the worker's session-ended callback (or the grade task)
+ * refers to — by attemptId first, then by room name — and return it with its
+ * interview mapped to the UI shape the analyzer consumes. The by-id lookup is the
+ * primary path; `roomName` is a defensive fallback. Returns null when no match.
  */
 export async function findAttemptForWebhook(
   attemptId: string | null,
-  vapiCallId: string | null,
+  roomName: string | null,
 ): Promise<{ id: string; status: string; interview: UiInterview } | null> {
-  const where = attemptId ? { id: attemptId } : vapiCallId ? { vapiCallId } : null;
+  const where = attemptId ? { id: attemptId } : roomName ? { roomName } : null;
   if (!where) return null;
   const row = await prisma.attempt.findFirst({
     where,
@@ -48,38 +48,10 @@ export async function findAttemptForWebhook(
 }
 
 /**
- * Owner-scoped lookup for the client-triggered grade endpoint — same shape as
- * findAttemptForWebhook but gated to the caller so a leaked id can't grade
- * someone else's attempt. Returns null when not found or not theirs.
- */
-export async function findOwnedAttempt(
-  attemptId: string,
-  userId: string,
-): Promise<{ id: string; status: string; interview: UiInterview } | null> {
-  const row = await prisma.attempt.findFirst({
-    where: { id: attemptId, userId },
-    select: { id: true, status: true, interview: { select: interviewRowSelect } },
-  });
-  if (!row) return null;
-  return { id: row.id, status: row.status, interview: toTemplateDTO(row.interview as InterviewRow) };
-}
-
-/**
- * Mark an attempt abandoned: the candidate ended the call mid-interview, so it is
- * never graded and stays out of history. Scoped to the owner and only flips an
- * `in_progress` row so a completed/graded attempt is never clobbered by a late call.
- */
-export async function abandonAttempt(attemptId: string, userId: string): Promise<void> {
-  await prisma.attempt.updateMany({
-    where: { id: attemptId, userId, status: "in_progress" },
-    data: { status: "abandoned", endedAt: new Date() },
-  });
-}
-
-/**
- * Webhook-trusted abandon: flag an `in_progress` attempt abandoned without an
- * owner scope (the webhook has no user). Used when the end-of-call report shows
- * the candidate ended mid-interview (no end_interview / completion signal).
+ * Flag an `in_progress` attempt abandoned: the candidate left mid-interview, so
+ * it is never graded and stays out of history. The worker's session-ended
+ * callback decides this server-side; only `in_progress` flips, so a completed/
+ * graded attempt is never clobbered by a late callback.
  */
 export async function markAbandoned(attemptId: string): Promise<void> {
   await prisma.attempt

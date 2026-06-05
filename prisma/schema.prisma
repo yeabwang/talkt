@@ -108,7 +108,9 @@ model Attempt {
   interviewId       String
   interview         Interview     @relation(fields: [interviewId], references: [id], onDelete: Cascade)
   status            AttemptStatus @default(in_progress)
-  vapiCallId        String?       @unique
+  // Deterministic LiveKit room ("attempt_<id>"); the worker's session-ended
+  // callback resolves the attempt by id, this is a defensive secondary key.
+  roomName          String?       @unique
   startedAt         DateTime      @default(now())
   endedAt           DateTime?
   transcriptBlobUrl String?
@@ -122,21 +124,17 @@ model Attempt {
   @@index([userId, startedAt])
 }
 
-// Cached pool of usable voice agents. The lobby/start path resolves a persona
-// (key) to a live provider voice id; availability is re-checked against Vapi and
-// a dead voice id is swapped for a working one, then this row is updated so the
-// next user gets the fresh value without another provider round-trip.
+// The pool of interviewer personas surfaced in the UI. With LiveKit Inference the
+// spoken TTS voice is a stable model string mapped worker-side (agent/src/voices.ts),
+// so this row is now a pure persona record (key/name/tone) — no provider, no voice
+// id to swap, no availability to poll.
 model VoiceAgent {
-  key         String   @id // stable persona key surfaced in the UI: adi/ren/kai/mira
-  name        String
-  tone        String
-  provider    String   @default("11labs") // Vapi voice provider
-  voiceId     String // provider voice id used to build the transient assistant
-  language    String   @default("en") // ISO 639-1 the voice is tuned for
-  available   Boolean  @default(true) // last known availability against the provider
-  lastChecked DateTime? // when availability was last verified (TTL-gated)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  key       String   @id // stable persona key surfaced in the UI: adi/ren/kai/mira
+  name      String
+  tone      String
+  language  String   @default("en") // ISO 639-1 the voice is tuned for
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Feedback {

@@ -21,7 +21,7 @@ import { type EndReason, InterviewerAgent } from "./interviewer";
 import { parseJob } from "./job";
 import { firstMessage } from "./prompt";
 import { historyToTurns } from "./transcript";
-import { TTS_MODEL, voiceFor } from "./voices";
+import { selectVoice } from "./voices";
 
 // SpeechHandle exposes waitForPlayout(); typed loosely so the wrap path can await
 // the goodbye finishing before we close, without depending on its exact type.
@@ -61,6 +61,9 @@ export default defineAgent({
     let capTimer: ReturnType<typeof setTimeout> | undefined;
 
     const vad = ctx.proc.userData.vad as silero.VAD;
+    // Voice is selected by language + persona (agent/src/voices.ts), not hardcoded;
+    // the language hint makes the multilingual voice speak the interview language.
+    const ttsVoice = selectVoice(job.persona, job.languageCode);
     const session = new voice.AgentSession({
       vad,
       // [VERIFY] Inference model ids (docs.livekit.io, 2026-06-05). nova-3 has the
@@ -70,7 +73,7 @@ export default defineAgent({
         language: job.languageCode === "en" ? "en" : "multi",
       }),
       llm: new inference.LLM({ model: "openai/gpt-5.3-chat-latest" }),
-      tts: new inference.TTS({ model: TTS_MODEL, voice: voiceFor(job.persona) }),
+      tts: new inference.TTS({ model: ttsVoice.model, voice: ttsVoice.voice, language: ttsVoice.language }),
       // Replaces Vapi's speakingPlans: the turn-detection model decides end-of-turn
       // so the interviewer doesn't talk over the candidate.
       turnHandling: { turnDetection: new livekit.turnDetector.MultilingualModel() },

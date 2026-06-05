@@ -1,21 +1,17 @@
 // Voice-agent personas: the pool of interviewer personas surfaced in the UI.
 // With LiveKit Inference the persona's actual TTS voice is a stable model string
 // mapped worker-side (agent/src/voices.ts), so there is no availability to poll
-// and no voice id to swap. resolveVoiceAgent() is now a pure persona lookup
+// and no voice id to swap. resolveVoiceAgent() is a pure persona lookup
 // (key/name/tone) with the unknown-key fallback preserved.
-//
-// (The VoiceAgent provider/voiceId/available/lastChecked columns are pruned in
-// spec 18; until then the seed still writes them for schema compatibility.)
 import { prisma } from "@/lib/prisma";
 
-// Seed personas surfaced in the UI (components/talkt/data.ts VOICES). The
-// provider/voiceId fields are legacy schema columns kept until spec 18 prunes
-// them; persona selection is by key, and the spoken voice is resolved worker-side.
+// Seed personas surfaced in the UI (components/talkt/data.ts VOICES). Selection
+// is by key; the spoken voice is resolved worker-side (agent/src/voices.ts).
 const DEFAULT_AGENTS = [
-  { key: "adi", name: "Adi", tone: "Calm, measured", provider: "11labs", voiceId: "ZoiZ8fuDWInAcwPXaVeq" },
-  { key: "ren", name: "Ren", tone: "Warm, direct", provider: "11labs", voiceId: "21m00Tcm4TlvDq8ikWAM" },
-  { key: "kai", name: "Kai", tone: "Brisk, precise", provider: "11labs", voiceId: "pNInz6obpgDQGcFmaJgB" },
-  { key: "mira", name: "Mira", tone: "Patient, probing", provider: "11labs", voiceId: "EXAVITQu4vr4xnSDxMaL" },
+  { key: "adi", name: "Adi", tone: "Calm, measured" },
+  { key: "ren", name: "Ren", tone: "Warm, direct" },
+  { key: "kai", name: "Kai", tone: "Brisk, precise" },
+  { key: "mira", name: "Mira", tone: "Patient, probing" },
 ];
 
 export interface ResolvedVoice {

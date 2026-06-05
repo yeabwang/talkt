@@ -88,15 +88,6 @@ export async function startCall(interviewId: string): Promise<CallSession> {
   return (await res.json()) as CallSession;
 }
 
-/** Flag an attempt abandoned (candidate ended mid-interview) so it's never graded. */
-export async function cancelAttempt(attemptId: string): Promise<void> {
-  await fetch(`/api/attempts/${attemptId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ abandon: true }),
-  }).catch(() => {});
-}
-
 /** Feedback shape returned by the attempt poller once analysis is ready. */
 export interface AttemptStatus {
   status: "in_progress" | "analyzing" | "ready" | "failed" | "abandoned";
@@ -108,37 +99,12 @@ export interface AttemptStatus {
   perQuestion?: { q: string; rating: number; critique: string; model: string }[];
 }
 
-/** Poll an attempt's analysis status. */
+/** Poll an attempt's analysis status. Grading is server-driven (the worker's
+ * session-ended callback triggers it), so the results screen just polls this. */
 export async function fetchAttemptStatus(attemptId: string): Promise<AttemptStatus> {
   const res = await fetch(`/api/attempts/${attemptId}`, { headers: { Accept: "application/json" } });
   if (!res.ok) return asError(res);
   return (await res.json()) as AttemptStatus;
-}
-
-/**
- * Result of kicking off grading: either it was already done (`ready`), or a
- * Trigger.dev run was started and we get its id + a read-scoped token to stream
- * progress via Realtime.
- */
-export type GradeHandle = { status: "ready" } | { runId: string; publicAccessToken: string };
-
-/**
- * Start grading from the transcript the browser captured during the call. The
- * server hands it to a durable Trigger.dev task and returns immediately; the
- * caller streams progress with the returned run id + token. Idempotent — safe to
- * call once when the call ends.
- */
-export async function gradeAttempt(
-  attemptId: string,
-  transcript: { role: string; text: string }[],
-): Promise<GradeHandle> {
-  const res = await fetch(`/api/attempts/${attemptId}/grade`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ transcript }),
-  });
-  if (!res.ok) return asError(res);
-  return (await res.json()) as GradeHandle;
 }
 
 /** Publish an already-persisted interview to the public directory. */

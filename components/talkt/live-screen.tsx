@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { cancelAttempt, type CallSession } from "@/components/talkt/api";
+import { type CallSession } from "@/components/talkt/api";
 import { type AppUser, type Interview } from "@/components/talkt/data";
 import { useLiveKitCall } from "@/components/talkt/use-livekit-call";
 import { AgentAvatar, Avatar, Icon, Waveform, Wordmark } from "@/components/talkt/primitives";
@@ -105,9 +105,9 @@ export function LiveInterviewScreen({
     endedHandledRef.current = true;
 
     if (call.endedManually) {
-      // Candidate hung up mid-interview — never grade it. Flag it abandoned and
-      // bounce to the dashboard after a brief beat.
-      void cancelAttempt(session.attemptId);
+      // Candidate hung up mid-interview. The worker classifies this as abandoned
+      // server-side (no end_interview before disconnect), so we just bounce to the
+      // dashboard after a brief beat — no client abandon call.
       const timer = window.setTimeout(onCancel, 1500);
       return () => window.clearTimeout(timer);
     }

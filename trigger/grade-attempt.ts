@@ -1,11 +1,11 @@
-// Durable grading task. The just-finished interview's transcript is graded here
-// (one DeepSeek call) instead of inline in the request — so the API returns
-// immediately and the browser streams progress via Trigger Realtime. Triggered
-// from POST /api/attempts/[id]/grade (client transcript) and the Vapi webhook.
+// Durable grading task. The completed interview's transcript is graded here
+// (one DeepSeek call) instead of inline in the request, so the trigger returns
+// immediately. Triggered server-side from POST /api/internal/session-ended when
+// the worker reports a `completed` outcome; the results screen polls the
+// attempt's status until grading lands.
 //
-// Steps are published to run metadata (`step`) so the results screen lights up
-// real progress ("Transcript received" → "Scoring" → "Saving") rather than a
-// faked timer animation.
+// Steps are still published to run metadata (`step`) for any future Realtime
+// consumer, but the live results path is poll-based.
 import { AbortTaskRunError, logger, metadata, task } from "@trigger.dev/sdk";
 
 import { analyzeTranscript } from "@/lib/analysis";

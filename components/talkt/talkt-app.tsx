@@ -286,12 +286,10 @@ export function TalkTApp() {
   } else if (route === "results") {
     const active = interview ?? allInterviews[0];
     const attemptId = params.attemptId as string | undefined;
-    const transcript = params.transcript as { role: string; text: string }[] | undefined;
     body = (
       <ResultsScreen
         interview={active}
         attemptId={attemptId}
-        transcript={transcript}
         navigate={navigate}
         startInterview={startInterview}
       />

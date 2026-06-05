@@ -1,12 +1,12 @@
-// GET  /api/attempts/[id] — poll attempt status (+ feedback once ready).
-// PATCH /api/attempts/[id] — attach the Vapi call id when the browser's call
-//        actually starts (defensive join key for the webhook). Both owner-scoped.
+// GET /api/attempts/[id] — poll attempt status (+ feedback once ready).
+// Owner-scoped. The completed-vs-abandoned decision and grading are driven
+// server-side by the worker's session-ended callback, so there is no longer a
+// client PATCH (attach call id / abandon) — the results screen just polls here.
 import { auth } from "@clerk/nextjs/server";
 import type { NextRequest } from "next/server";
 
 import { notFound, unauthorized } from "@/lib/api";
-import { abandonAttempt, attachCallId, getAttemptStatus } from "@/lib/db/attempts";
-import { isRecord, optBool, optString } from "@/lib/validate";
+import { getAttemptStatus } from "@/lib/db/attempts";
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { userId } = await auth();
@@ -16,18 +16,4 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   const result = await getAttemptStatus(id, userId);
   if (!result) return notFound();
   return Response.json(result);
-}
-
-export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const { userId } = await auth();
-  if (!userId) return unauthorized();
-
-  const { id } = await ctx.params;
-  const raw = await req.json().catch(() => null);
-  const callId = isRecord(raw) ? optString(raw.vapiCallId, "vapiCallId", 200) : undefined;
-  const abandon = isRecord(raw) ? optBool(raw.abandon, "abandon") : undefined;
-  // Candidate ended the call mid-interview — flag it so it is never graded.
-  if (abandon) await abandonAttempt(id, userId);
-  if (callId) await attachCallId(id, userId, callId);
-  return Response.json({ ok: true });
 }
