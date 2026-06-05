@@ -40,7 +40,7 @@ CREATE TABLE "Attempt" (
     "userId" TEXT NOT NULL,
     "interviewId" TEXT NOT NULL,
     "status" "AttemptStatus" NOT NULL DEFAULT 'in_progress',
-    "vapiCallId" TEXT,
+    "roomName" TEXT,
     "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "endedAt" TIMESTAMP(3),
     "transcriptBlobUrl" TEXT,
@@ -73,7 +73,7 @@ CREATE INDEX "Interview_ownerId_idx" ON "Interview"("ownerId");
 CREATE INDEX "Interview_type_visibility_idx" ON "Interview"("type", "visibility");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Attempt_vapiCallId_key" ON "Attempt"("vapiCallId");
+CREATE UNIQUE INDEX "Attempt_roomName_key" ON "Attempt"("roomName");
 
 -- CreateIndex
 CREATE INDEX "Attempt_userId_idx" ON "Attempt"("userId");

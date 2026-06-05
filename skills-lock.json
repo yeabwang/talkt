@@ -42,60 +42,6 @@
       "sourceType": "github",
       "skillPath": "skills/core/clerk-setup/SKILL.md",
       "computedHash": "bbf0711ddcc8d8d0dcd148c0061ab83c7d66225a60a28caba62ef76e4384fa54"
-    },
-    "create-assistant": {
-      "source": "VapiAI/skills",
-      "sourceType": "github",
-      "skillPath": "create-assistant/SKILL.md",
-      "computedHash": "d520c5cbb520bf892386589fcf57b69f43c889bebcd66affa4a345c48d466c8f"
-    },
-    "create-call": {
-      "source": "VapiAI/skills",
-      "sourceType": "github",
-      "skillPath": "create-call/SKILL.md",
-      "computedHash": "9eec6423f10565dbb0299afc955e91fc2439562006d60e112be4ac5b026dba9e"
-    },
-    "create-phone-number": {
-      "source": "VapiAI/skills",
-      "sourceType": "github",
-      "skillPath": "create-phone-number/SKILL.md",
-      "computedHash": "f74ffa835a0edb373b7f14fd2b1a7b1f9618313c2f35fd8c3ba25ced031422a6"
-    },
-    "create-squad": {
-      "source": "VapiAI/skills",
-      "sourceType": "github",
-      "skillPath": "create-squad/SKILL.md",
-      "computedHash": "0a2bb9aac6cd526e08dbdc68bedb266822b0abb643ec43286d7865df2872f8eb"
-    },
-    "create-tool": {
-      "source": "VapiAI/skills",
-      "sourceType": "github",
-      "skillPath": "create-tool/SKILL.md",
-      "computedHash": "cba13ecd3b0e45cbb0eaa3f2b4e23600a03622f44272252af9d4ebc5030c8b6f"
-    },
-    "create-workflow": {
-      "source": "VapiAI/skills",
-      "sourceType": "github",
-      "skillPath": "create-workflow/SKILL.md",
-      "computedHash": "1efe895862d1a0119aa5d513aec6a7435b7fb5317868d419d8d0a51bfd0180f5"
-    },
-    "setup-api-key": {
-      "source": "VapiAI/skills",
-      "sourceType": "github",
-      "skillPath": "setup-api-key/SKILL.md",
-      "computedHash": "34b4895784635f5a585806a0b8e5c72192d00494eb64102176ba111374c4184d"
-    },
-    "setup-webhook": {
-      "source": "VapiAI/skills",
-      "sourceType": "github",
-      "skillPath": "setup-webhook/SKILL.md",
-      "computedHash": "8a728970de41b06a5438b873ab523bbcb784dd14a3dfe2e21a8a0ba74dc66710"
-    },
-    "vapi-bootstrap-framework": {
-      "source": "VapiAI/skills",
-      "sourceType": "github",
-      "skillPath": "vapi-bootstrap-framework/SKILL.md",
-      "computedHash": "b1d20decec677d2f39d4289f06b249578bf6a99440e1cb61e1626336b922b23b"
     }
   }
 }

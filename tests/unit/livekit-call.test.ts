@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  appendTranscriptChunk,
   disconnectStatus,
   isFinalTranscript,
   mergeTurn,
+  shouldPublishTranscriptChunk,
   transcriptBlocks,
   transcriptRole,
   type TranscriptTurn,
@@ -65,6 +67,19 @@ test("isFinalTranscript reads the lk.transcription_final stream attribute", () =
   assert.equal(isFinalTranscript({ "lk.transcription_final": "false" }), false);
   assert.equal(isFinalTranscript({}), false);
   assert.equal(isFinalTranscript(undefined), false);
+});
+
+test("appendTranscriptChunk accumulates delta chunks instead of replacing with the last word", () => {
+  let text = "";
+  text = appendTranscriptChunk(text, "Thanks for ");
+  text = appendTranscriptChunk(text, "joining.");
+  assert.equal(text, "Thanks for joining.");
+});
+
+test("assistant transcript chunks publish only when final", () => {
+  assert.equal(shouldPublishTranscriptChunk("assistant", false), false);
+  assert.equal(shouldPublishTranscriptChunk("assistant", true), true);
+  assert.equal(shouldPublishTranscriptChunk("user", false), true);
 });
 
 test("disconnectStatus treats a post-connect disconnect as a normal end", () => {

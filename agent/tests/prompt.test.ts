@@ -39,6 +39,12 @@ describe("systemPrompt", () => {
     expect(p).toContain("end_interview");
   });
 
+  it("explicitly forbids repeating core questions", () => {
+    const p = systemPrompt(base);
+    expect(p).toContain("Never ask the same core question more than once");
+    expect(p).toContain("mark it as answered and move to the next core question");
+  });
+
   it("does not expose private wrap cues", () => {
     expect(systemPrompt(base)).not.toContain("[director]");
   });

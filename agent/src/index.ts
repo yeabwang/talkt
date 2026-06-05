@@ -26,7 +26,7 @@ import {
   createInterviewTtsOptions,
   createInterviewTurnHandling,
 } from "./session-config.js";
-import { historyToTurns } from "./transcript.js";
+import { CommittedTranscript } from "./transcript.js";
 
 // SpeechHandle exposes waitForPlayout(); typed loosely so the wrap path can await
 // the goodbye finishing before we close, without depending on its exact type.
@@ -80,6 +80,7 @@ export default defineAgent({
       // that endpoint patient enough for natural pauses and avoids speculative replies.
       turnHandling: createInterviewTurnHandling(turnDetection),
     });
+    const transcript = new CommittedTranscript(session);
 
     // Single end path shared by the tool and the time cap. `reason` stays null
     // until one of them fires; on close, null => the candidate bailed (abandoned).
@@ -97,10 +98,10 @@ export default defineAgent({
       if (!finalizePromise) {
         finalizePromise = (async () => {
           if (capTimer.current) clearTimeout(capTimer.current);
-          const transcript = historyToTurns(session);
+          const turns = transcript.turns();
           const outcome: Outcome = control.reason ? "completed" : "abandoned";
           try {
-            await postSessionEnded({ attemptId: job.attemptId, transcript, outcome });
+            await postSessionEnded({ attemptId: job.attemptId, transcript: turns, outcome });
           } catch (err) {
             console.error("[entry] session-ended callback failed:", err);
           }
@@ -109,16 +110,23 @@ export default defineAgent({
       return finalizePromise;
     };
 
-    const closeSession = (): Promise<void> => {
+    const closeSession = (reason: EndReason): Promise<void> => {
       if (!control.closePromise) {
-        control.closePromise = session
-          .close()
-          .catch((err) => {
-            console.error("[entry] session close failed:", err);
-          })
-          .finally(() => finalize());
+        control.closePromise = new Promise<void>((resolve) => {
+          session.once(voice.AgentSessionEventTypes.Close, () => resolve());
+          session.shutdown({ drain: true, reason: `talkt_${reason}` });
+        }).finally(() => finalize());
       }
       return control.closePromise;
+    };
+    let deleteRoomPromise: Promise<void> | null = null;
+    const deleteRoom = (): Promise<void> => {
+      if (!deleteRoomPromise) {
+        deleteRoomPromise = ctx.deleteRoom().catch((err) => {
+          console.error("[entry] room delete failed:", err);
+        });
+      }
+      return deleteRoomPromise;
     };
     const end = async (reason: EndReason): Promise<void> => {
       if (control.ended) {
@@ -127,8 +135,13 @@ export default defineAgent({
       }
       control.ended = true;
       control.reason = reason;
-      await closeSession();
+      await closeSession(reason);
+      await deleteRoom();
     };
+
+    session.on(voice.AgentSessionEventTypes.ConversationItemAdded, (ev: voice.ConversationItemAddedEvent) => {
+      transcript.add(ev.item);
+    });
 
     // Primary completion signal. agents-js issue #896: shutdown callbacks can be
     // skipped on some hangups, so the close event is primary and the shutdown

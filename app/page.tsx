@@ -1,5 +1,5 @@
-import { TalkTApp } from "@/components/talkt/talkt-app";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return <TalkTApp />;
+  redirect("/dashboard");
 }

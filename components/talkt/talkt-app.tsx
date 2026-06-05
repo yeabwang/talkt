@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useClerk, useUser } from "@clerk/nextjs";
+import { usePathname } from "next/navigation";
 
 import { fetchAttempts, fetchDirectory, fetchRecommended, type CallSession } from "@/components/talkt/api";
 import { AppShell, type TalkTRoute } from "@/components/talkt/app-shell";
@@ -20,6 +21,101 @@ import { UsageScreen } from "@/components/talkt/usage-screen";
 type Theme = "dark" | "light";
 
 const USER_CACHE_KEY = "talkt-user";
+
+interface AppPathState {
+  route: TalkTRoute;
+  params: Record<string, unknown>;
+}
+
+function decodeSegment(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function routeFromPath(pathname: string | null): AppPathState {
+  const parts = (pathname ?? "/").split("/").filter(Boolean);
+  const first = parts[0];
+  const second = decodeSegment(parts[1]);
+
+  if (!first || first === "dashboard") return { route: "dashboard", params: {} };
+  if (first === "templates") {
+    return second ? { route: "detail", params: { interviewId: second } } : { route: "library", params: {} };
+  }
+  if (first === "builder") return { route: "builder", params: {} };
+  if (first === "reports") return { route: "reports", params: {} };
+  if (first === "usage") return { route: "usage", params: {} };
+  if (first === "settings") return { route: "settings", params: {} };
+  if (first === "results") {
+    return second ? { route: "results", params: { attemptId: second } } : { route: "results", params: {} };
+  }
+  if ((first === "interviews" || first === "interview") && second) {
+    return parts[2] === "live"
+      ? { route: "live", params: { interviewId: second } }
+      : { route: "lobby", params: { interviewId: second } };
+  }
+  return { route: "dashboard", params: {} };
+}
+
+function idFromParams(params: Record<string, unknown>): string | undefined {
+  const interview = params.interview as Interview | undefined;
+  return interview?.id ?? (params.interviewId as string | undefined);
+}
+
+function pathForRoute(route: TalkTRoute, params: Record<string, unknown> = {}): string {
+  const interviewId = idFromParams(params);
+  const attemptId = params.attemptId as string | undefined;
+  switch (route) {
+    case "dashboard":
+      return "/dashboard";
+    case "library":
+      return "/templates";
+    case "detail":
+      return interviewId ? `/templates/${encodeURIComponent(interviewId)}` : "/templates";
+    case "builder":
+      return "/builder";
+    case "reports":
+      return "/reports";
+    case "usage":
+      return "/usage";
+    case "settings":
+      return "/settings";
+    case "results":
+      return attemptId ? `/results/${encodeURIComponent(attemptId)}` : "/results";
+    case "lobby":
+      return interviewId ? `/interviews/${encodeURIComponent(interviewId)}` : "/templates";
+    case "live":
+      return interviewId ? `/interviews/${encodeURIComponent(interviewId)}/live` : "/templates";
+    default:
+      return "/dashboard";
+  }
+}
+
+function mergePathParams(next: AppPathState, current: Record<string, unknown>): Record<string, unknown> {
+  const currentInterview = current.interview as Interview | undefined;
+  const nextInterviewId = next.params.interviewId as string | undefined;
+  const currentAttemptId = current.attemptId as string | undefined;
+  const nextAttemptId = next.params.attemptId as string | undefined;
+
+  if ((next.route === "lobby" || next.route === "detail") && currentInterview?.id === nextInterviewId) {
+    return { ...next.params, interview: currentInterview };
+  }
+  if (next.route === "live" && current.session && currentInterview?.id === nextInterviewId) {
+    return {
+      ...next.params,
+      interview: currentInterview,
+      session: current.session,
+      camStream: current.camStream,
+    };
+  }
+  if (next.route === "results" && currentAttemptId && currentAttemptId === nextAttemptId) {
+    return { ...next.params, interview: current.interview, fromHistory: current.fromHistory };
+  }
+  return next.params;
+}
 
 // Minimal shape we read off the Clerk user resource.
 interface ClerkUserLike {
@@ -74,11 +170,13 @@ function clearCachedUser() {
 }
 
 export function TalkTApp() {
+  const pathname = usePathname();
+  const pathState = React.useMemo(() => routeFromPath(pathname), [pathname]);
   const { isLoaded, user: clerkUser } = useUser();
   const { signOut: clerkSignOut } = useClerk();
   const [theme, setTheme] = React.useState<Theme>("dark");
-  const [route, setRoute] = React.useState<TalkTRoute>("dashboard");
-  const [params, setParams] = React.useState<Record<string, unknown>>({});
+  const [route, setRoute] = React.useState<TalkTRoute>(pathState.route);
+  const [params, setParams] = React.useState<Record<string, unknown>>(pathState.params);
   // Custom interviews the user builds this session but hasn't published yet.
   const [sessionInterviews, setSessionInterviews] = React.useState<Interview[]>([]);
   // The live, ranked directory from the API (the only source of templates now).
@@ -207,9 +305,22 @@ export function TalkTApp() {
   const attemptsLoading = isPending(attemptsStatus) && attempts.length === 0;
   const toggleTheme = () => setTheme((current) => (current === "dark" ? "light" : "dark"));
 
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setRoute(pathState.route);
+      setParams((current) => mergePathParams(pathState, current));
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [pathState]);
+
   const navigate = React.useCallback((nextRoute: TalkTRoute, nextParams: Record<string, unknown> = {}) => {
     setParams(nextParams);
     setRoute(nextRoute);
+    const nextPath = pathForRoute(nextRoute, nextParams);
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState(null, "", nextPath);
+    }
     window.scrollTo(0, 0);
   }, []);
 
@@ -221,8 +332,7 @@ export function TalkTApp() {
     if (interview.custom && !findInterview(interview.id)) {
       setSessionInterviews((current) => [interview, ...current]);
     }
-    setParams({ interview });
-    setRoute("lobby");
+    navigate("lobby", { interview });
   };
 
   // "/" is protected by proxy.ts, so a reaching user is authenticated. A cached

@@ -100,6 +100,14 @@ export function isFinalTranscript(attributes: Record<string, string> | undefined
   return v === "true" || (v as unknown) === true;
 }
 
+export function appendTranscriptChunk(current: string, chunk: string): string {
+  return `${current}${chunk}`;
+}
+
+export function shouldPublishTranscriptChunk(role: "assistant" | "user", final: boolean): boolean {
+  return role === "user" || final;
+}
+
 function transcriptSegmentId(attributes: Record<string, string> | undefined, streamId: string): string {
   return attributes?.["lk.segment_id"] ?? streamId;
 }
@@ -315,8 +323,8 @@ export function useLiveKitCall(): UseLiveKitCall {
             let text = "";
             try {
               for await (const chunk of reader) {
-                text = chunk;
-                pushTranscript(role, text, false, segmentId);
+                text = appendTranscriptChunk(text, chunk);
+                if (shouldPublishTranscriptChunk(role, false)) pushTranscript(role, text, false, segmentId);
                 if (role === "user" && text.trim()) {
                   heardUserRef.current = true;
                   setNoInputDetected(false);
@@ -326,7 +334,7 @@ export function useLiveKitCall(): UseLiveKitCall {
               /* stream aborted on teardown — keep whatever we have */
             }
             const final = isFinalTranscript(reader.info.attributes);
-            pushTranscript(role, text, final, segmentId);
+            pushTranscript(role, text, role === "assistant" ? true : final, segmentId);
             if (role === "user") {
               heardUserRef.current = true;
               setNoInputDetected(false); // React bails if already false — no extra render

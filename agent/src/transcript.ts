@@ -53,3 +53,26 @@ export function historyToTurns(session: SessionLike): Turn[] {
   }
   return out;
 }
+
+/**
+ * Records transcript from LiveKit's committed conversation items. This avoids
+ * grading from in-flight transcription streams, which can be partial or delta
+ * chunks while the agent is still speaking.
+ */
+export class CommittedTranscript {
+  private readonly committed: Turn[] = [];
+
+  constructor(private readonly fallback?: SessionLike) {}
+
+  add(item: HistoryItemLike): void {
+    if (item.type !== "message") return;
+    if (item.role !== "user" && item.role !== "assistant") return;
+    const text = itemText(item).trim();
+    if (!text) return;
+    this.committed.push({ role: item.role, text });
+  }
+
+  turns(): Turn[] {
+    return this.committed.length ? [...this.committed] : historyToTurns(this.fallback ?? {});
+  }
+}
