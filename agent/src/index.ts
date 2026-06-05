@@ -25,6 +25,7 @@ import {
   createInterviewRoomOutputOptions,
   createInterviewTtsOptions,
   createInterviewTurnHandling,
+  resolveAwayGraceMs,
 } from "./session-config.js";
 import { CommittedTranscript } from "./transcript.js";
 
@@ -64,6 +65,8 @@ export default defineAgent({
     // Declared up front so the close handler (which may fire before the cap is
     // armed, e.g. an immediate disconnect) can clear it without a TDZ error.
     const capTimer: { current?: ReturnType<typeof setTimeout> } = {};
+    // Away-backstop timer (issue 3); cleared on finalize alongside the cap.
+    const awayTimer: { current?: ReturnType<typeof setTimeout> } = {};
 
     const vad = ctx.proc.userData.vad as silero.VAD;
     const models = resolveAgentModelConfig({ persona: job.persona, languageCode: job.languageCode });
@@ -98,6 +101,7 @@ export default defineAgent({
       if (!finalizePromise) {
         finalizePromise = (async () => {
           if (capTimer.current) clearTimeout(capTimer.current);
+          if (awayTimer.current) clearTimeout(awayTimer.current);
           const turns = transcript.turns();
           const outcome: Outcome = control.reason ? "completed" : "abandoned";
           try {
@@ -141,6 +145,58 @@ export default defineAgent({
 
     session.on(voice.AgentSessionEventTypes.ConversationItemAdded, (ev: voice.ConversationItemAddedEvent) => {
       transcript.add(ev.item);
+    });
+
+    // Away-backstop (issue 3): the agent sometimes finishes but never calls
+    // end_interview, or the candidate drifts off without hanging up, leaving the
+    // call hung until the hard cap and ungraded. LiveKit flips userState to "away"
+    // after a short silence. On the first away we give one spoken check-in; if the
+    // candidate is still away after another grace window, we wrap and close as
+    // time so the attempt is still graded. Any real activity cancels the timer, so
+    // a candidate who is merely thinking is never cut off.
+    const awayGraceMs = resolveAwayGraceMs();
+    let checkedIn = false;
+    const clearAwayTimer = () => {
+      if (awayTimer.current) {
+        clearTimeout(awayTimer.current);
+        awayTimer.current = undefined;
+      }
+    };
+    const onAwayElapsed = async () => {
+      if (control.ended) return;
+      if (!checkedIn) {
+        checkedIn = true;
+        const handle = session.generateReply({
+          instructions: "It's gone quiet. Gently check whether the candidate is still there — one short line, no new question.",
+        });
+        await waitForPlayout(handle);
+        if (control.ended) return;
+        // Only arm the closing window if the candidate is still away — they may
+        // have started answering while we spoke the check-in.
+        if (session.userState === "away") {
+          awayTimer.current = setTimeout(() => void onAwayElapsed(), awayGraceMs);
+        }
+        return;
+      }
+      const handle = session.generateReply({
+        instructions:
+          "The candidate has gone quiet and seems to have stepped away. Briefly thank them, say their feedback is being prepared, and say goodbye.",
+      });
+      await waitForPlayout(handle);
+      await end("time");
+    };
+    session.on(voice.AgentSessionEventTypes.UserStateChanged, (ev: voice.UserStateChangedEvent) => {
+      if (control.ended) {
+        clearAwayTimer();
+        return;
+      }
+      clearAwayTimer();
+      if (ev.newState === "away") {
+        awayTimer.current = setTimeout(() => void onAwayElapsed(), awayGraceMs);
+      } else {
+        // Genuine activity resumed — reset the one-time check-in.
+        checkedIn = false;
+      }
     });
 
     // Primary completion signal. agents-js issue #896: shutdown callbacks can be

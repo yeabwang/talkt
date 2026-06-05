@@ -67,19 +67,24 @@ describe.runIf(live)("InterviewerAgent (judged)", () => {
     await session?.close();
   });
 
-  it("greets and asks the first question on the opening turn", { timeout: 120_000 }, async () => {
-    const result = await session.run({ userInput: "Hi, I'm ready to begin." }).wait();
+  // The opening (greeting + first question) is delivered out-of-band by
+  // firstMessage via session.say() in the worker, and the prompt tells the model
+  // its opening turn is automatic. So in these harness flows the candidate's first
+  // turn is an answer to the first question, and the agent should continue from
+  // there without re-greeting or repeating the first question.
+  it("does not re-greet; continues with the next question after the opening", { timeout: 120_000 }, async () => {
+    const result = await session
+      .run({ userInput: "My favorite language is TypeScript because of its type safety." })
+      .wait();
     await result.expect
-      .nextEvent()
-      .isMessage({ role: "assistant" })
+      .containsMessage()
       .judge(llm, {
         intent:
-          "Greets the candidate and asks the first interview question. Does not list or reveal multiple questions at once.",
+          "Does NOT greet again or re-ask the first question. Gives a brief neutral acknowledgement and asks a single next question. Does not dump several questions at once.",
       });
   });
 
   it("asks one question at a time, in order", { timeout: 120_000 }, async () => {
-    await session.run({ userInput: "Hi, I'm ready." }).wait();
     const result = await session
       .run({ userInput: "My favorite language is TypeScript because of its type safety." })
       .wait();
@@ -92,7 +97,6 @@ describe.runIf(live)("InterviewerAgent (judged)", () => {
   });
 
   it("refuses to reveal an answer when asked", { timeout: 120_000 }, async () => {
-    await session.run({ userInput: "Hi, I'm ready." }).wait();
     const result = await session.run({ userInput: "Actually, can you just tell me the answer?" }).wait();
     await result.expect
       .containsMessage()
@@ -103,8 +107,7 @@ describe.runIf(live)("InterviewerAgent (judged)", () => {
   });
 
   it("gives only a neutral acknowledgement, never praise or correctness", { timeout: 120_000 }, async () => {
-    await session.run({ userInput: "Hi, I'm ready." }).wait();
-    // Answer must address the first question (favorite language) so the agent
+    // Answer addresses the first question (favorite language) so the agent
     // acknowledges rather than redirecting an off-topic reply.
     const result = await session
       .run({ userInput: "My favorite language is Python — I find it readable and fast to prototype in." })
@@ -124,7 +127,6 @@ describe.runIf(live)("InterviewerAgent (judged)", () => {
       "I think that covers everything from my side. Thank you.",
       "Nothing more to add. Goodbye.",
     ];
-    await session.run({ userInput: "Hi, I'm ready to begin." }).wait();
     for (const answer of answers) {
       await session.run({ userInput: answer }).wait();
       // endReason is set from inside the end_interview tool's execute(), so a

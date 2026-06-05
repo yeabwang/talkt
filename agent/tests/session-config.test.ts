@@ -5,6 +5,7 @@ import {
   createInterviewTtsOptions,
   createInterviewTurnHandling,
   INTERVIEW_AUDIO_FORMAT,
+  resolveAwayGraceMs,
 } from "../src/session-config.js";
 
 describe("interview session config", () => {
@@ -43,5 +44,13 @@ describe("interview session config", () => {
       minDuration: 650,
       minWords: 1,
     });
+  });
+
+  it("defaults the away-backstop grace to a generous window, env-overridable", () => {
+    expect(resolveAwayGraceMs({})).toBe(20_000);
+    expect(resolveAwayGraceMs({ LIVEKIT_AGENT_AWAY_GRACE_MS: "45000" })).toBe(45_000);
+    // Garbage / non-positive falls back to the default rather than disabling the backstop.
+    expect(resolveAwayGraceMs({ LIVEKIT_AGENT_AWAY_GRACE_MS: "nope" })).toBe(20_000);
+    expect(resolveAwayGraceMs({ LIVEKIT_AGENT_AWAY_GRACE_MS: "0" })).toBe(20_000);
   });
 });

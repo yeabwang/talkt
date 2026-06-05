@@ -35,14 +35,27 @@ describe("systemPrompt", () => {
     const p = systemPrompt(base);
     expect(p).toContain("You are Mira");
     expect(p).toContain("Speak entirely in English");
-    expect(p).toMatch(/NEVER reveal/);
+    expect(p).toMatch(/Never reveal/);
     expect(p).toContain("end_interview");
   });
 
-  it("explicitly forbids repeating core questions", () => {
+  it("explicitly forbids repeating questions and anchors memory to the transcript", () => {
     const p = systemPrompt(base);
-    expect(p).toContain("Never ask the same core question more than once");
-    expect(p).toContain("mark it as answered and move to the next core question");
+    expect(p).toContain("ONE AT A TIME");
+    expect(p).toContain("never re-ask or reword a question you have already asked");
+    expect(p).toContain("conversation history above is your memory");
+  });
+
+  it("tells the model its opening turn is delivered automatically (so it leads, no re-greet)", () => {
+    const p = systemPrompt(base);
+    expect(p).toContain("opening turn");
+    expect(p).toContain("delivered for you automatically");
+  });
+
+  it("requires calling end_interview to close so the attempt is graded", () => {
+    const p = systemPrompt(base);
+    expect(p).toMatch(/immediately call the `end_interview` tool/);
+    expect(p).toContain("the candidate is left waiting if you don't");
   });
 
   it("does not expose private wrap cues", () => {
@@ -59,5 +72,10 @@ describe("firstMessage", () => {
     const m = firstMessage(base);
     expect(m.startsWith("Hi, thanks")).toBe(true);
     expect(m).toContain("Product manager");
+  });
+
+  it("leads by asking the first question, so the agent never waits on the candidate", () => {
+    expect(firstMessage(base)).toContain("Q one alpha");
+    expect(firstMessage({ ...base, candidateFirstName: "Sam" })).toContain("Q one alpha");
   });
 });
