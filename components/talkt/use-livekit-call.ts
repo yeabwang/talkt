@@ -17,6 +17,13 @@ export interface TranscriptTurn {
   role: "assistant" | "user";
   text: string;
   final: boolean;
+  segmentId?: string;
+}
+
+export interface TranscriptBlock {
+  role: "assistant" | "user";
+  text: string;
+  final: boolean;
 }
 
 // LiveKit topic the agent publishes interim + final transcriptions on.
@@ -28,15 +35,55 @@ const TRANSCRIPTION_TOPIC = "lk.transcription";
  * Append a final turn, or replace the trailing partial for the same role. The
  * transcript drawer depends on this stable merge behavior.
  */
-export function mergeTurn(turns: TranscriptTurn[], role: "assistant" | "user", text: string, final: boolean): TranscriptTurn[] {
-  const next = [...turns];
-  const last = next[next.length - 1];
-  if (last && last.role === role && !last.final) {
-    next[next.length - 1] = { role, text, final };
-  } else {
-    next.push({ role, text, final });
+export function mergeTurn(
+  turns: TranscriptTurn[],
+  role: "assistant" | "user",
+  text: string,
+  final: boolean,
+  segmentId?: string,
+): TranscriptTurn[] {
+  const clean = text.trim();
+  if (!clean) return turns;
+
+  const incoming: TranscriptTurn = segmentId ? { role, text: clean, final, segmentId } : { role, text: clean, final };
+  const existingIndex = segmentId ? turns.findIndex((turn) => turn.segmentId === segmentId) : -1;
+  if (existingIndex >= 0) {
+    const existing = turns[existingIndex];
+    if (sameTurn(existing, incoming)) return turns;
+    const next = [...turns];
+    next[existingIndex] = incoming;
+    return next;
   }
-  return next;
+
+  const last = turns[turns.length - 1];
+  if (last && last.role === role && !last.final && !last.segmentId) {
+    if (sameTurn(last, incoming)) return turns;
+    const next = [...turns];
+    next[next.length - 1] = incoming;
+    return next;
+  }
+
+  return [...turns, incoming];
+}
+
+function sameTurn(a: TranscriptTurn, b: TranscriptTurn): boolean {
+  return a.role === b.role && a.text === b.text && a.final === b.final && a.segmentId === b.segmentId;
+}
+
+export function transcriptBlocks(turns: TranscriptTurn[]): TranscriptBlock[] {
+  const blocks: TranscriptBlock[] = [];
+  for (const turn of turns) {
+    const text = turn.text.trim();
+    if (!text) continue;
+    const last = blocks[blocks.length - 1];
+    if (last && last.role === turn.role) {
+      last.text = `${last.text} ${text}`.trim();
+      last.final = last.final && turn.final;
+    } else {
+      blocks.push({ role: turn.role, text, final: turn.final });
+    }
+  }
+  return blocks;
 }
 
 /**
@@ -51,6 +98,10 @@ export function transcriptRole(localIdentity: string | null, senderIdentity: str
 export function isFinalTranscript(attributes: Record<string, string> | undefined): boolean {
   const v = attributes?.["lk.transcription_final"];
   return v === "true" || (v as unknown) === true;
+}
+
+function transcriptSegmentId(attributes: Record<string, string> | undefined, streamId: string): string {
+  return attributes?.["lk.segment_id"] ?? streamId;
 }
 
 /**
@@ -92,10 +143,11 @@ interface RoomLike {
   connect: (url: string, token: string) => Promise<void>;
   disconnect: () => Promise<void>;
   registerTextStreamHandler: (topic: string, cb: (reader: TextReaderLike, info: { identity: string }) => void) => void;
+  unregisterTextStreamHandler?: (topic: string) => void;
 }
 
 interface TextReaderLike extends AsyncIterable<string> {
-  info: { attributes?: Record<string, string> };
+  info: { id: string; attributes?: Record<string, string> };
 }
 
 interface SpeakerLike {
@@ -126,9 +178,15 @@ export function useLiveKitCall(): UseLiveKitCall {
   // Once the agent reports its own state attribute, trust it over active-speaker
   // heuristics for the assistant tile.
   const sawAgentStateRef = React.useRef(false);
+  const assistantSpeakingRef = React.useRef(false);
+  const userSpeakingRef = React.useRef(false);
+  const volumeRef = React.useRef(0);
 
   const cleanup = React.useCallback(() => {
-    if (noInputTimer.current) window.clearTimeout(noInputTimer.current);
+    if (noInputTimer.current) {
+      window.clearTimeout(noInputTimer.current);
+      noInputTimer.current = null;
+    }
     for (const el of audioElsRef.current) {
       try {
         el.remove();
@@ -139,6 +197,7 @@ export function useLiveKitCall(): UseLiveKitCall {
     audioElsRef.current = [];
     const room = roomRef.current;
     if (room) {
+      room.unregisterTextStreamHandler?.(TRANSCRIPTION_TOPIC);
       void room.disconnect().catch(() => {});
       roomRef.current = null;
     }
@@ -146,8 +205,27 @@ export function useLiveKitCall(): UseLiveKitCall {
 
   React.useEffect(() => cleanup, [cleanup]);
 
-  const pushTranscript = React.useCallback((role: "assistant" | "user", text: string, final: boolean) => {
-    setTurns((prev) => mergeTurn(prev, role, text, final));
+  const pushTranscript = React.useCallback((role: "assistant" | "user", text: string, final: boolean, segmentId?: string) => {
+    setTurns((prev) => mergeTurn(prev, role, text, final, segmentId));
+  }, []);
+
+  const setAssistantSpeakingStable = React.useCallback((next: boolean) => {
+    if (assistantSpeakingRef.current === next) return;
+    assistantSpeakingRef.current = next;
+    setAssistantSpeaking(next);
+  }, []);
+
+  const setUserSpeakingStable = React.useCallback((next: boolean) => {
+    if (userSpeakingRef.current === next) return;
+    userSpeakingRef.current = next;
+    setUserSpeaking(next);
+  }, []);
+
+  const setVolumeStable = React.useCallback((next: number) => {
+    const normalized = Number.isFinite(next) ? next : 0;
+    if (Math.abs(volumeRef.current - normalized) < 0.02) return;
+    volumeRef.current = normalized;
+    setVolume(normalized);
   }, []);
 
   const start = React.useCallback(
@@ -163,6 +241,12 @@ export function useLiveKitCall(): UseLiveKitCall {
       connectedRef.current = false;
       heardUserRef.current = false;
       sawAgentStateRef.current = false;
+      assistantSpeakingRef.current = false;
+      userSpeakingRef.current = false;
+      volumeRef.current = 0;
+      setAssistantSpeaking(false);
+      setUserSpeaking(false);
+      setVolume(0);
       setNoInputDetected(false);
       setEndedManually(false);
 
@@ -175,8 +259,9 @@ export function useLiveKitCall(): UseLiveKitCall {
         const localId = () => room.localParticipant.identity;
 
         room.on(RoomEvent.Disconnected, () => {
-          setAssistantSpeaking(false);
-          setUserSpeaking(false);
+          setAssistantSpeakingStable(false);
+          setUserSpeakingStable(false);
+          setVolumeStable(0);
           setStatus((s) => (s === "error" ? s : disconnectStatus(connectedRef.current)));
         });
 
@@ -207,10 +292,10 @@ export function useLiveKitCall(): UseLiveKitCall {
               agent = true;
             }
           }
-          setUserSpeaking(you);
-          setVolume(you ? vol : 0);
+          setUserSpeakingStable(you);
+          setVolumeStable(you ? vol : 0);
           // The agent's own state attribute is more precise; defer to it once seen.
-          if (!sawAgentStateRef.current) setAssistantSpeaking(agent);
+          if (!sawAgentStateRef.current) setAssistantSpeakingStable(agent);
         });
 
         // The agent publishes `lk.agent.state` (…|speaking|listening|thinking).
@@ -219,24 +304,29 @@ export function useLiveKitCall(): UseLiveKitCall {
           const changed = args[0] as Record<string, string> | undefined;
           if (!changed || !("lk.agent.state" in changed)) return;
           sawAgentStateRef.current = true;
-          setAssistantSpeaking(changed["lk.agent.state"] === "speaking");
+          setAssistantSpeakingStable(changed["lk.agent.state"] === "speaking");
         });
 
         // Streamed transcriptions (interim + final), role by sender identity.
         room.registerTextStreamHandler(TRANSCRIPTION_TOPIC, (reader, sender) => {
           const role = transcriptRole(localId(), sender.identity);
+          const segmentId = transcriptSegmentId(reader.info.attributes, reader.info.id);
           void (async () => {
             let text = "";
             try {
               for await (const chunk of reader) {
                 text = chunk;
-                pushTranscript(role, text, false);
+                pushTranscript(role, text, false, segmentId);
+                if (role === "user" && text.trim()) {
+                  heardUserRef.current = true;
+                  setNoInputDetected(false);
+                }
               }
             } catch {
               /* stream aborted on teardown — keep whatever we have */
             }
             const final = isFinalTranscript(reader.info.attributes);
-            pushTranscript(role, text.trim(), final);
+            pushTranscript(role, text, final, segmentId);
             if (role === "user") {
               heardUserRef.current = true;
               setNoInputDetected(false); // React bails if already false — no extra render
@@ -267,7 +357,7 @@ export function useLiveKitCall(): UseLiveKitCall {
         cleanup();
       }
     },
-    [cleanup, pushTranscript],
+    [cleanup, pushTranscript, setAssistantSpeakingStable, setUserSpeakingStable, setVolumeStable],
   );
 
   // `manual` marks a candidate-initiated hang-up (the End button) so the UI shows
@@ -285,5 +375,8 @@ export function useLiveKitCall(): UseLiveKitCall {
     });
   }, []);
 
-  return { status, turns, assistantSpeaking, userSpeaking, volume, muted, roomName, error, noInputDetected, endedManually, start, stop, toggleMute };
+  return React.useMemo(
+    () => ({ status, turns, assistantSpeaking, userSpeaking, volume, muted, roomName, error, noInputDetected, endedManually, start, stop, toggleMute }),
+    [status, turns, assistantSpeaking, userSpeaking, volume, muted, roomName, error, noInputDetected, endedManually, start, stop, toggleMute],
+  );
 }

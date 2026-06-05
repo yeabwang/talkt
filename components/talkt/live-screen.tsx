@@ -4,7 +4,7 @@ import * as React from "react";
 
 import { type CallSession } from "@/components/talkt/api";
 import { type AppUser, type Interview } from "@/components/talkt/data";
-import { useLiveKitCall } from "@/components/talkt/use-livekit-call";
+import { transcriptBlocks, useLiveKitCall } from "@/components/talkt/use-livekit-call";
 import { AgentAvatar, Avatar, Icon, Waveform, Wordmark } from "@/components/talkt/primitives";
 
 // Words too generic to identify which question is being asked. English-only, but
@@ -74,11 +74,12 @@ export function LiveInterviewScreen({
 
   // Kick off the call once (StrictMode double-invoke guard). Joins the room
   // minted server-side; the worker is dispatched into it by the same token.
+  const startCall = call.start;
   React.useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
-    void call.start(session.serverUrl, session.token);
-  }, [call, session]);
+    void startCall(session.serverUrl, session.token);
+  }, [startCall, session.serverUrl, session.token]);
 
   // Attach + tear down the local self-view stream owned by this screen.
   React.useEffect(() => {
@@ -130,18 +131,9 @@ export function LiveInterviewScreen({
   const aiSpeaking = call.assistantSpeaking;
   const youSpeaking = call.userSpeaking && !call.muted;
 
-  // Settled turn-by-turn view: drop partials, merge consecutive same-speaker
-  // fragments so each turn is one block (no broken half-sentences).
-  const conversation = React.useMemo(() => {
-    const blocks: { role: "assistant" | "user"; text: string }[] = [];
-    for (const turn of call.turns) {
-      if (!turn.final || !turn.text.trim()) continue;
-      const last = blocks[blocks.length - 1];
-      if (last && last.role === turn.role) last.text = `${last.text} ${turn.text}`.trim();
-      else blocks.push({ role: turn.role, text: turn.text.trim() });
-    }
-    return blocks;
-  }, [call.turns]);
+  // Turn-by-turn view, including the current in-flight transcript from either
+  // speaker so the drawer mirrors what the candidate hears in real time.
+  const conversation = React.useMemo(() => transcriptBlocks(call.turns), [call.turns]);
 
   // Progress tracks how far through the question set the interviewer has gotten,
   // not elapsed time (interviews finish well before the cap). Advances when the

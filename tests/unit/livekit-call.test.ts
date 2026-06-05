@@ -5,6 +5,7 @@ import {
   disconnectStatus,
   isFinalTranscript,
   mergeTurn,
+  transcriptBlocks,
   transcriptRole,
   type TranscriptTurn,
 } from "@/components/talkt/use-livekit-call";
@@ -31,6 +32,23 @@ test("mergeTurn keeps a final turn and starts a fresh one after it", () => {
   turns = mergeTurn(turns, "assistant", "follow up", false);
   assert.equal(turns.length, 2);
   assert.deepEqual(turns[1], { role: "assistant", text: "follow up", final: false });
+});
+
+test("mergeTurn preserves referential identity for duplicate stream updates", () => {
+  const turns: TranscriptTurn[] = [{ role: "assistant", text: "Question one", final: false }];
+  const next = mergeTurn(turns, "assistant", "Question one", false);
+  assert.equal(next, turns);
+});
+
+test("transcriptBlocks includes the assistant's in-flight speech", () => {
+  const turns: TranscriptTurn[] = [
+    { role: "assistant", text: "Tell me about a project", final: false },
+    { role: "user", text: "I built a scheduler", final: true },
+  ];
+  assert.deepEqual(transcriptBlocks(turns), [
+    { role: "assistant", text: "Tell me about a project", final: false },
+    { role: "user", text: "I built a scheduler", final: true },
+  ]);
 });
 
 test("transcriptRole maps the local participant to the candidate", () => {

@@ -21,6 +21,11 @@ import { type EndReason, InterviewerAgent } from "./interviewer.js";
 import { parseJob } from "./job.js";
 import { resolveAgentModelConfig } from "./model-config.js";
 import { firstMessage } from "./prompt.js";
+import {
+  createInterviewRoomOutputOptions,
+  createInterviewTtsOptions,
+  createInterviewTurnHandling,
+} from "./session-config.js";
 import { historyToTurns } from "./transcript.js";
 
 // SpeechHandle exposes waitForPlayout(); typed loosely so the wrap path can await
@@ -62,6 +67,7 @@ export default defineAgent({
 
     const vad = ctx.proc.userData.vad as silero.VAD;
     const models = resolveAgentModelConfig({ persona: job.persona, languageCode: job.languageCode });
+    const turnDetection = new livekit.turnDetector.MultilingualModel();
     const session = new voice.AgentSession({
       vad,
       stt: new inference.STT({
@@ -69,36 +75,59 @@ export default defineAgent({
         language: models.stt.language,
       }),
       llm: new inference.LLM({ model: models.llm.model }),
-      tts: new inference.TTS({ model: models.tts.model, voice: models.tts.voice, language: models.tts.language }),
-      // The turn-detection model decides end-of-turn so the interviewer doesn't
-      // talk over the candidate.
-      turnHandling: { turnDetection: new livekit.turnDetector.MultilingualModel() },
+      tts: new inference.TTS(createInterviewTtsOptions(models.tts)),
+      // The turn-detection model decides end-of-turn; the interview config keeps
+      // that endpoint patient enough for natural pauses and avoids speculative replies.
+      turnHandling: createInterviewTurnHandling(turnDetection),
     });
 
     // Single end path shared by the tool and the time cap. `reason` stays null
     // until one of them fires; on close, null => the candidate bailed (abandoned).
-    const control: { reason: EndReason | null; ended: boolean } = { reason: null, ended: false };
-    const end = async (reason: EndReason): Promise<void> => {
-      if (control.ended) return; // guard double-close (tool vs time cap)
-      control.ended = true;
-      control.reason = reason;
-      await session.close();
+    const control: { reason: EndReason | null; ended: boolean; closePromise: Promise<void> | null } = {
+      reason: null,
+      ended: false,
+      closePromise: null,
     };
 
     // Post exactly once. Both the close event and the shutdown backstop call this;
-    // the server endpoint is idempotent, and `posted` keeps us from double-POSTing.
-    let posted = false;
-    const finalize = async (): Promise<void> => {
-      if (posted) return;
-      posted = true;
-      if (capTimer.current) clearTimeout(capTimer.current);
-      const transcript = historyToTurns(session);
-      const outcome: Outcome = control.reason ? "completed" : "abandoned";
-      try {
-        await postSessionEnded({ attemptId: job.attemptId, transcript, outcome });
-      } catch (err) {
-        console.error("[entry] session-ended callback failed:", err);
+    // the server endpoint is idempotent, and `finalizePromise` keeps us from
+    // double-POSTing while still giving shutdown a promise to await.
+    let finalizePromise: Promise<void> | null = null;
+    const finalize = (): Promise<void> => {
+      if (!finalizePromise) {
+        finalizePromise = (async () => {
+          if (capTimer.current) clearTimeout(capTimer.current);
+          const transcript = historyToTurns(session);
+          const outcome: Outcome = control.reason ? "completed" : "abandoned";
+          try {
+            await postSessionEnded({ attemptId: job.attemptId, transcript, outcome });
+          } catch (err) {
+            console.error("[entry] session-ended callback failed:", err);
+          }
+        })();
       }
+      return finalizePromise;
+    };
+
+    const closeSession = (): Promise<void> => {
+      if (!control.closePromise) {
+        control.closePromise = session
+          .close()
+          .catch((err) => {
+            console.error("[entry] session close failed:", err);
+          })
+          .finally(() => finalize());
+      }
+      return control.closePromise;
+    };
+    const end = async (reason: EndReason): Promise<void> => {
+      if (control.ended) {
+        await (control.closePromise ?? Promise.resolve());
+        return;
+      }
+      control.ended = true;
+      control.reason = reason;
+      await closeSession();
     };
 
     // Primary completion signal. agents-js issue #896: shutdown callbacks can be
@@ -109,12 +138,13 @@ export default defineAgent({
       void finalize();
     });
     ctx.addShutdownCallback(async () => {
+      if (control.closePromise) await control.closePromise;
       await finalize();
     });
 
     const agent = new InterviewerAgent(job, end);
 
-    await session.start({ agent, room: ctx.room });
+    await session.start({ agent, room: ctx.room, outputOptions: createInterviewRoomOutputOptions() });
     await ctx.connect();
 
     // Fixed opening line (not LLM-generated), so say() rather than generateReply().

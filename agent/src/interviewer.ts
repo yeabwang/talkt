@@ -23,7 +23,11 @@ export function createEndInterviewTool(onEnd: (reason: EndReason) => Promise<voi
       reason: endReasonSchema.describe("Why the interview ended."),
     }),
     execute: async ({ reason }) => {
-      await onEnd(reason);
+      setTimeout(() => {
+        void onEnd(reason).catch((err) => {
+          console.error("[interviewer] failed to close interview:", err);
+        });
+      }, 0);
       return "The interview has ended.";
     },
   });

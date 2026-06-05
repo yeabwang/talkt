@@ -7,7 +7,7 @@
 import { inference, initializeLogger, voice } from "@livekit/agents";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { type EndReason, InterviewerAgent } from "../src/interviewer.js";
+import { createEndInterviewTool, type EndReason, InterviewerAgent } from "../src/interviewer.js";
 import type { InterviewJob } from "../src/job.js";
 import { resolveLlmModel } from "../src/model-config.js";
 
@@ -28,6 +28,24 @@ const job: InterviewJob = {
   ],
   maxDurationSeconds: 600,
 };
+
+describe("end_interview tool", () => {
+  it("returns promptly even when session close work continues asynchronously", async () => {
+    const tool = createEndInterviewTool(
+      () =>
+        new Promise<never>(() => {
+          // Simulates AgentSession.close() waiting on the current activity.
+        }),
+    );
+
+    const result = await Promise.race([
+      tool.execute({ reason: "completed" }, {} as never),
+      new Promise((resolve) => setTimeout(() => resolve("timeout"), 25)),
+    ]);
+
+    expect(result).toBe("The interview has ended.");
+  });
+});
 
 describe.runIf(live)("InterviewerAgent (judged)", () => {
   let session: voice.AgentSession;
