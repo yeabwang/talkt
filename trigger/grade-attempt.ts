@@ -1,8 +1,8 @@
 // Durable grading task. The completed interview's transcript is graded here
 // (one DeepSeek call) instead of inline in the request, so the trigger returns
-// immediately. Triggered server-side from POST /api/internal/session-ended when
-// the worker reports a `completed` outcome; the results screen polls the
-// attempt's status until grading lands.
+// immediately. Triggered server-side from POST /api/vapi/webhook when the
+// end-of-call report classifies a `completed` outcome; the results screen polls
+// the attempt's status until grading lands.
 //
 // Steps are still published to run metadata (`step`) for any future Realtime
 // consumer, but the live results path is poll-based.

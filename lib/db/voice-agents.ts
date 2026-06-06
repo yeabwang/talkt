@@ -1,8 +1,8 @@
 // Voice-agent personas: the pool of interviewer personas surfaced in the UI.
-// With LiveKit Inference the persona's actual TTS voice/model is resolved
-// worker-side from env-backed config (agent/src/model-config.ts), so there is no
-// availability to poll and no voice id to swap. resolveVoiceAgent() is a pure persona lookup
-// (key/name/tone) with the unknown-key fallback preserved.
+// The persona's actual Vapi TTS voice is resolved in code from a per-language
+// catalog (lib/vapi/voices.ts), so there is no availability to poll and no voice
+// id stored here. resolveVoiceAgent() is a pure persona lookup (key/name/tone)
+// with the unknown-key fallback preserved.
 import { prisma } from "@/lib/prisma";
 
 // Seed personas surfaced in the UI (components/talkt/data.ts VOICES). Selection

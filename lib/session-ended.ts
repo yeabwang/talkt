@@ -1,10 +1,8 @@
-// Pure logic for the worker's session-ended callback (POST
-// /api/internal/session-ended). Kept free of Prisma / the Trigger SDK so it is
-// unit-testable with fakes; the route (app/api/internal/session-ended/route.ts)
-// wires the real DB + Trigger client into these seams.
-import { timingSafeEqual } from "node:crypto";
-
-import { sanitizeTranscript, type Turn } from "@/lib/transcript";
+// Pure grading-decision logic shared by the Vapi end-of-call webhook (POST
+// /api/vapi/webhook). Kept free of Prisma / the Trigger SDK so it is unit-testable
+// with fakes; the route wires the real DB + Trigger client into these seams.
+// (Header verification + report→body mapping live in lib/vapi/webhook.ts.)
+import type { Turn } from "@/lib/transcript";
 
 export type Outcome = "completed" | "abandoned";
 
@@ -12,40 +10,6 @@ export interface SessionEndedBody {
   attemptId: string;
   transcript: Turn[];
   outcome: Outcome;
-}
-
-/** Constant-time secret match (avoids leaking length/prefix via timing). */
-function constantTimeEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  return ab.length === bb.length && timingSafeEqual(ab, bb);
-}
-
-/**
- * Authorize the callback. Mirrors the old webhook's posture: with a configured
- * secret the header must match (else 401); without one, fail closed in
- * production (503) but allow through in dev so local worker testing works.
- */
-export function authorizeSession(
-  provided: string | null,
-  secret: string | undefined,
-  isProd: boolean,
-): "ok" | 401 | 503 {
-  if (secret) return provided && constantTimeEqual(provided, secret) ? "ok" : 401;
-  return isProd ? 503 : "ok";
-}
-
-/** Parse + validate the worker payload. Null on any malformed field. */
-export function parseSessionEndedBody(raw: unknown): SessionEndedBody | null {
-  if (!raw || typeof raw !== "object") return null;
-  const rec = raw as Record<string, unknown>;
-  if (typeof rec.attemptId !== "string" || !rec.attemptId) return null;
-  if (rec.outcome !== "completed" && rec.outcome !== "abandoned") return null;
-  return {
-    attemptId: rec.attemptId,
-    outcome: rec.outcome,
-    transcript: sanitizeTranscript(rec.transcript),
-  };
 }
 
 // Injectable dependencies so the decision logic can be tested with fakes for the

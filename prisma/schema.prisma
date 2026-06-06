@@ -125,10 +125,10 @@ model Attempt {
   @@index([userId, startedAt])
 }
 
-// The pool of interviewer personas surfaced in the UI. With LiveKit Inference the
-// spoken TTS voice/model is resolved worker-side from env-backed config
-// (agent/src/model-config.ts), so this row is now a pure persona record
-// (key/name/tone) — no provider, no voice id to swap, no availability to poll.
+// The pool of interviewer personas surfaced in the UI. The spoken Vapi TTS voice
+// is resolved in code from a per-language catalog (lib/vapi/voices.ts), so this
+// row is a pure persona record (key/name/tone) — no provider, no voice id to
+// swap, no availability to poll.
 model VoiceAgent {
   key       String   @id // stable persona key surfaced in the UI: adi/ren/kai/mira
   name      String

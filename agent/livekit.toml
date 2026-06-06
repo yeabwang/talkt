@@ -1,9 +1,0 @@
-# LiveKit Cloud agent deployment config.
-# `lk agent create` writes the real project subdomain and agent id here.
-# The dispatch name is set in src/index.ts as ServerOptions.agentName.
-
-[project]
-subdomain = "your-project-subdomain"
-
-[agent]
-id = "replace-with-lk-agent-create-id"
