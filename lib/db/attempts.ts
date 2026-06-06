@@ -1,8 +1,8 @@
 // Attempt repository. The directory's recommendation profile is derived from a
 // user's attempt history (which interviews, what level, what language). Also the
-// call lifecycle: create on start (stamped with the deterministic room name),
-// then move in_progress -> analyzing -> ready (or failed) as the worker's
-// session-ended callback drives grading and writes Feedback.
+// call lifecycle: create on start (stamped with its Vapi assistant id once
+// created), then move in_progress -> analyzing -> ready (or failed) as the
+// Vapi end-of-call webhook drives grading and writes Feedback.
 import type { Interview as UiInterview } from "@/components/talkt/data";
 import type { AnalysisResult } from "@/lib/analysis";
 import { interviewRowSelect, toTemplateDTO, type InterviewRow } from "@/lib/dto";
@@ -10,34 +10,41 @@ import { prisma } from "@/lib/prisma";
 import { toLanguageLabel } from "@/lib/language";
 import type { AttemptFacets } from "@/lib/recommend";
 
-/**
- * Start an attempt row for a user taking an interview (status: in_progress) and
- * stamp it with its deterministic LiveKit room name, which is also the worker's
- * dispatch key and a defensive secondary lookup for the session-ended callback.
- */
+/** Start an attempt row (status: in_progress). The Vapi call/assistant ids are
+ * stamped later via storeVapiIds once the assistant is created. */
 export async function createAttempt(userId: string, interviewId: string): Promise<string> {
   const attempt = await prisma.attempt.create({
     data: { userId, interviewId },
     select: { id: true },
   });
-  await prisma.attempt.update({
-    where: { id: attempt.id },
-    data: { roomName: `attempt_${attempt.id}` },
-  });
   return attempt.id;
 }
 
+/** Stamp the Vapi assistant id (and optionally call id) onto an attempt. */
+export async function storeVapiIds(
+  attemptId: string,
+  ids: { assistantId?: string; callId?: string },
+): Promise<void> {
+  await prisma.attempt.update({
+    where: { id: attemptId },
+    data: {
+      ...(ids.assistantId ? { vapiAssistantId: ids.assistantId } : {}),
+      ...(ids.callId ? { vapiCallId: ids.callId } : {}),
+    },
+  });
+}
+
 /**
- * Resolve the attempt the worker's session-ended callback (or the grade task)
- * refers to — by attemptId first, then by room name — and return it with its
- * interview mapped to the UI shape the analyzer consumes. The by-id lookup is the
- * primary path; `roomName` is a defensive fallback. Returns null when no match.
+ * Resolve the attempt the Vapi webhook (or the grade task) refers to — by
+ * attemptId first, then by the ephemeral assistant id — and return it with its
+ * interview mapped to the UI shape the analyzer consumes. Returns null when no
+ * match.
  */
 export async function findAttemptForWebhook(
   attemptId: string | null,
-  roomName: string | null,
+  vapiAssistantId: string | null,
 ): Promise<{ id: string; status: string; interview: UiInterview } | null> {
-  const where = attemptId ? { id: attemptId } : roomName ? { roomName } : null;
+  const where = attemptId ? { id: attemptId } : vapiAssistantId ? { vapiAssistantId } : null;
   if (!where) return null;
   const row = await prisma.attempt.findFirst({
     where,

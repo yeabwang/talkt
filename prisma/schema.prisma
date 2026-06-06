@@ -108,9 +108,10 @@ model Attempt {
   interviewId       String
   interview         Interview     @relation(fields: [interviewId], references: [id], onDelete: Cascade)
   status            AttemptStatus @default(in_progress)
-  // Deterministic LiveKit room ("attempt_<id>"); the worker's session-ended
-  // callback resolves the attempt by id, this is a defensive secondary key.
-  roomName          String?       @unique
+  // Vapi call id (correlation / defensive secondary key) and the ephemeral
+  // assistant id (deleted by the end-of-call webhook).
+  vapiCallId        String?       @unique
+  vapiAssistantId   String?
   startedAt         DateTime      @default(now())
   endedAt           DateTime?
   transcriptBlobUrl String?
