@@ -43,7 +43,8 @@ export interface BuildAssistantEnv {
 export function buildVapiAssistant(job: InterviewJob, env: BuildAssistantEnv): AssistantPayload {
   const voice = resolveVapiVoice(job.persona, job.languageCode, env.voiceEnv);
   return {
-    name: `talkt-interview-${job.attemptId}`,
+    // Vapi caps assistant name at 40 chars; `talkt-<cuid>` stays well under.
+    name: `talkt-${job.attemptId}`.slice(0, 40),
     firstMessage: firstMessage(job),
     firstMessageMode: "assistant-speaks-first",
     maxDurationSeconds: job.maxDurationSeconds,

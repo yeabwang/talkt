@@ -45,6 +45,12 @@ test("wires the webhook URL (no double slash) + secret + serverMessages", () => 
   assert.deepEqual(a.serverMessages, ["end-of-call-report"]);
 });
 
+test("assistant name stays within Vapi's 40-char limit even for a full cuid", () => {
+  // Prisma cuid() is 25 chars; `talkt-interview-<cuid>` (41) used to 400.
+  const a = buildVapiAssistant(job({ attemptId: "clz1234567890abcdefghijkl" }), env);
+  assert.ok(a.name.length <= 40, `name too long: ${a.name.length}`);
+});
+
 test("carries the cap, the end-call tool, and attempt metadata", () => {
   const a = buildVapiAssistant(job({ maxDurationSeconds: 600 }), env);
   assert.equal(a.maxDurationSeconds, 600);
