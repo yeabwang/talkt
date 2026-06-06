@@ -4,7 +4,7 @@ import * as React from "react";
 
 import { type CallSession } from "@/components/talkt/api";
 import { type AppUser, type Interview } from "@/components/talkt/data";
-import { transcriptBlocks, useLiveKitCall } from "@/components/talkt/use-livekit-call";
+import { transcriptBlocks, useVapiCall } from "@/components/talkt/use-vapi-call";
 import { AgentAvatar, Avatar, Icon, Waveform, Wordmark } from "@/components/talkt/primitives";
 
 // Words too generic to identify which question is being asked. English-only, but
@@ -63,7 +63,7 @@ export function LiveInterviewScreen({
   onEnd: (attemptId: string) => void;
   onCancel: () => void;
 }) {
-  const call = useLiveKitCall();
+  const call = useVapiCall();
   const [elapsed, setElapsed] = React.useState(0);
   const [showTranscript, setShowTranscript] = React.useState(false);
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
@@ -72,14 +72,14 @@ export function LiveInterviewScreen({
   // Total core questions, for the question-driven progress bar.
   const totalQuestions = interview.questions?.length || interview.count || 1;
 
-  // Kick off the call once (StrictMode double-invoke guard). Joins the room
-  // minted server-side; the worker is dispatched into it by the same token.
+  // Kick off the call once (StrictMode double-invoke guard). Starts the Vapi web
+  // call with the ephemeral assistant id minted server-side.
   const startCall = call.start;
   React.useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
-    void startCall(session.serverUrl, session.token);
-  }, [startCall, session.serverUrl, session.token]);
+    void startCall(session.assistantId, session.publicKey);
+  }, [startCall, session.assistantId, session.publicKey]);
 
   // Attach + tear down the local self-view stream owned by this screen.
   React.useEffect(() => {

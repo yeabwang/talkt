@@ -62,23 +62,22 @@ export async function persistBuiltInterview(payload: BuiltInterviewPayload): Pro
   return data.interview;
 }
 
-// ── Voice call (LiveKit) ─────────────────────────────────────────────
+// ── Voice call (Vapi) ────────────────────────────────────────────────
 
 /**
- * Server-resolved call session: the attempt plus the LiveKit join details. The
- * browser (spec 17) connects to `serverUrl` with `token`; the interviewer worker
- * is dispatched into `roomName` by the same token.
+ * Server-resolved call session. The browser starts the call with `@vapi-ai/web`
+ * using `assistantId` + `publicKey`; the system prompt + questions live only in
+ * the ephemeral assistant created server-side and never reach the client.
  */
 export interface CallSession {
   attemptId: string;
-  serverUrl: string; // LIVEKIT_URL the browser dials
-  token: string; // short-lived room-join JWT
-  roomName: string; // deterministic "attempt_<id>"
+  assistantId: string; // ephemeral Vapi assistant id
+  publicKey: string; // NEXT_PUBLIC_VAPI_PUBLIC_KEY
   // Resolved voice persona name, shown on the interviewer tile.
   interviewerName: string;
 }
 
-/** Begin a call: resolves the persona, opens an attempt, returns the LiveKit session. */
+/** Begin a call: resolves the persona, opens an attempt, creates the ephemeral assistant. */
 export async function startCall(interviewId: string): Promise<CallSession> {
   const res = await fetch(`/api/interviews/${interviewId}/call`, {
     method: "POST",
