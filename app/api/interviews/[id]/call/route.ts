@@ -61,8 +61,8 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
   const assistantPayload = buildVapiAssistant(job, {
     appUrl,
     webhookSecret,
-    modelProvider: process.env.VAPI_MODEL_PROVIDER || "google",
-    model: process.env.VAPI_MODEL || "gemini-2.5-flash",
+    modelProvider: process.env.VAPI_MODEL_PROVIDER || "openai",
+    model: process.env.VAPI_MODEL || "gpt-4.1-mini",
     transcriberProvider: process.env.VAPI_TRANSCRIBER_PROVIDER || "deepgram",
     transcriberModel: process.env.VAPI_TRANSCRIBER_MODEL || "nova-3",
   });
