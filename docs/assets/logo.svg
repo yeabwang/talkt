@@ -1,0 +1,13 @@
+<svg width="720" height="180" viewBox="0 0 720 180" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="talkt">
+  <!-- mark: voice waveform inside a rounded tile -->
+  <rect x="8" y="20" width="140" height="140" rx="38" fill="#1c1917"/>
+  <g fill="#fafaf9">
+    <rect x="40"  y="74"  width="11" height="32" rx="5.5"/>
+    <rect x="58"  y="58"  width="11" height="64" rx="5.5"/>
+    <rect x="76"  y="44"  width="11" height="92" rx="5.5"/>
+    <rect x="94"  y="60"  width="11" height="60" rx="5.5"/>
+    <rect x="112" y="72"  width="11" height="36" rx="5.5"/>
+  </g>
+  <!-- wordmark -->
+  <text x="178" y="123" font-family="'Geist', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="110" font-weight="700" letter-spacing="-4" fill="#1c1917">talkt</text>
+</svg>
