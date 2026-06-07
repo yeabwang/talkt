@@ -1,7 +1,5 @@
 // Prisma client singleton. Branches by DATABASE_URL:
-//   - prisma+postgres:// (Prisma Postgres) → connect through Accelerate,
-//     no local driver adapter.
-//   - everything else → direct Postgres (pooled TCP) via @prisma/adapter-pg.
+
 // Cached on globalThis in development so hot reload reuses one instance.
 import { Prisma, PrismaClient } from "./generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
