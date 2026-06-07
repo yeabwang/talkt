@@ -106,7 +106,6 @@ export interface UseVapiCall {
   volume: number;
   muted: boolean;
   error: string | null;
-  noInputDetected: boolean;
   // False from connect until the interviewer's first word (speech or transcript).
   // Drives the "connecting to your interviewer…" copy that covers Vapi's
   // few-second pipeline warm-up so the candidate isn't staring at silence.
@@ -137,20 +136,15 @@ export function useVapiCall(): UseVapiCall {
   const [muted, setMuted] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [endedManually, setEndedManually] = React.useState(false);
-  const [noInputDetected, setNoInputDetected] = React.useState(false);
   const [interviewerStarted, setInterviewerStarted] = React.useState(false);
 
   const vapiRef = React.useRef<VapiLike | null>(null);
   const connectedRef = React.useRef(false);
   const interviewerStartedRef = React.useRef(false);
-  const heardUserRef = React.useRef(false);
-  const noInputTimer = React.useRef<number | null>(null);
   const userSpeakingTimer = React.useRef<number | null>(null);
 
   const cleanup = React.useCallback(() => {
-    if (noInputTimer.current) window.clearTimeout(noInputTimer.current);
     if (userSpeakingTimer.current) window.clearTimeout(userSpeakingTimer.current);
-    noInputTimer.current = null;
     userSpeakingTimer.current = null;
     const v = vapiRef.current;
     if (v) {
@@ -189,11 +183,9 @@ export function useVapiCall(): UseVapiCall {
       setError(null);
       setTurns([]);
       connectedRef.current = false;
-      heardUserRef.current = false;
       setAssistantSpeaking(false);
       setUserSpeaking(false);
       setVolume(0);
-      setNoInputDetected(false);
       setEndedManually(false);
       setInterviewerStarted(false);
       interviewerStartedRef.current = false;
@@ -207,13 +199,6 @@ export function useVapiCall(): UseVapiCall {
         vapi.on("call-start", () => {
           connectedRef.current = true;
           setStatus("active");
-          if (noInputTimer.current) window.clearTimeout(noInputTimer.current);
-          noInputTimer.current = window.setTimeout(() => {
-            if (!heardUserRef.current) {
-              console.warn("[vapi] no candidate audio ~10s after connect — mic may not be captured");
-              setNoInputDetected(true);
-            }
-          }, 10_000);
         });
 
         vapi.on("call-end", () => {
@@ -240,8 +225,6 @@ export function useVapiCall(): UseVapiCall {
           if (t.role === "assistant") markInterviewerStarted();
           pushTranscript(t.role, t.text, t.final);
           if (t.role === "user") {
-            heardUserRef.current = true;
-            setNoInputDetected(false);
             // Drive the candidate tile's speaking flag off transcript activity.
             setUserSpeaking(true);
             if (userSpeakingTimer.current) window.clearTimeout(userSpeakingTimer.current);
@@ -288,7 +271,7 @@ export function useVapiCall(): UseVapiCall {
   }, []);
 
   return React.useMemo(
-    () => ({ status, turns, assistantSpeaking, userSpeaking, volume, muted, error, noInputDetected, interviewerStarted, endedManually, start, stop, toggleMute }),
-    [status, turns, assistantSpeaking, userSpeaking, volume, muted, error, noInputDetected, interviewerStarted, endedManually, start, stop, toggleMute],
+    () => ({ status, turns, assistantSpeaking, userSpeaking, volume, muted, error, interviewerStarted, endedManually, start, stop, toggleMute }),
+    [status, turns, assistantSpeaking, userSpeaking, volume, muted, error, interviewerStarted, endedManually, start, stop, toggleMute],
   );
 }

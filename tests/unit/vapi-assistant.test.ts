@@ -66,6 +66,18 @@ test("resolves the persona + language voice", () => {
   assert.equal(en.transcriber.language, "en");
 });
 
+test("English uses LiveKit smart endpointing; other languages use patient transcription timeouts", () => {
+  const en = buildVapiAssistant(job({ languageCode: "en" }), env);
+  assert.deepEqual(en.startSpeakingPlan, { waitSeconds: 0.8, smartEndpointingPlan: { provider: "livekit" } });
+
+  const plan = buildVapiAssistant(job({ languageCode: "es" }), env).startSpeakingPlan;
+  assert.ok("transcriptionEndpointingPlan" in plan, "non-English should use transcription endpointing");
+  if ("transcriptionEndpointingPlan" in plan) {
+    assert.equal(plan.waitSeconds, 0.8);
+    assert.ok(plan.transcriptionEndpointingPlan.onNoPunctuationSeconds >= 2);
+  }
+});
+
 test("model + transcriber are overridable via env", () => {
   const a = buildVapiAssistant(job(), { ...env, modelProvider: "openai", model: "gpt-4.1-mini", transcriberModel: "nova-2" });
   assert.equal(a.model.provider, "openai");

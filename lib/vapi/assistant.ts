@@ -25,10 +25,26 @@ export interface AssistantPayload {
   };
   voice: { provider: string; voiceId: string };
   transcriber: { provider: string; model: string; language: string };
+  // Turn-taking patience. Keeps the interviewer from cutting in when the
+  // candidate pauses to think or uses filler words (replaces the old LiveKit
+  // endpointing config). English uses LiveKit smart (model-based) endpointing;
+  // other languages (where smart endpointing isn't supported) fall back to
+  // generous transcription-silence timeouts.
+  startSpeakingPlan:
+    | { waitSeconds: number; smartEndpointingPlan: { provider: "livekit" } }
+    | {
+        waitSeconds: number;
+        transcriptionEndpointingPlan: { onPunctuationSeconds: number; onNoPunctuationSeconds: number; onNumberSeconds: number };
+      };
   server: { url: string; secret: string };
   serverMessages: ["end-of-call-report"];
   metadata: { attemptId: string };
 }
+
+// How long the interviewer waits after the candidate seems to stop. Higher =
+// more patient. Tuned for "thinking out loud" interview cadence.
+const START_WAIT_SECONDS = 0.8;
+const PATIENT_NO_PUNCTUATION_SECONDS = 2.2; // wait this long on a trailing pause
 
 export interface BuildAssistantEnv {
   appUrl: string; // NEXT_PUBLIC_APP_URL
@@ -42,6 +58,17 @@ export interface BuildAssistantEnv {
 
 export function buildVapiAssistant(job: InterviewJob, env: BuildAssistantEnv): AssistantPayload {
   const voice = resolveVapiVoice(job.persona, job.languageCode, env.voiceEnv);
+  const isEnglish = job.languageCode.trim().toLowerCase().startsWith("en");
+  const startSpeakingPlan: AssistantPayload["startSpeakingPlan"] = isEnglish
+    ? { waitSeconds: START_WAIT_SECONDS, smartEndpointingPlan: { provider: "livekit" } }
+    : {
+        waitSeconds: START_WAIT_SECONDS,
+        transcriptionEndpointingPlan: {
+          onPunctuationSeconds: 0.4,
+          onNoPunctuationSeconds: PATIENT_NO_PUNCTUATION_SECONDS,
+          onNumberSeconds: 0.6,
+        },
+      };
   return {
     // Vapi caps assistant name at 40 chars; `talkt-<cuid>` stays well under.
     name: `talkt-${job.attemptId}`.slice(0, 40),
@@ -57,6 +84,7 @@ export function buildVapiAssistant(job: InterviewJob, env: BuildAssistantEnv): A
     },
     voice,
     transcriber: { provider: env.transcriberProvider, model: env.transcriberModel, language: job.languageCode },
+    startSpeakingPlan,
     server: { url: `${env.appUrl.replace(/\/$/, "")}/api/vapi/webhook`, secret: env.webhookSecret },
     serverMessages: ["end-of-call-report"],
     metadata: { attemptId: job.attemptId },
