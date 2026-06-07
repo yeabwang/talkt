@@ -23,18 +23,10 @@ Practice interviews **out loud** with a real-time AI interviewer, then get a str
 
 ## What is talkt?
 
-**talkt** is a full-stack web app for spoken interview practice. You describe the
+**talkt** is a place for spoken interview practice. You describe the
 interview you want in a short chat, an AI builder turns that into a structured
 interview (questions + the dimensions it should be scored on), and then you
-**actually talk to an AI interviewer** over your microphone. When the call ends,
-the transcript is graded asynchronously and you get a report: an overall score,
-per-dimension scores with notes, per-question critique with model answers, and
-concrete strengths and improvements — all backed by quotes from what you said.
-
-Good interviews don't have to stay private. Publish a custom interview to the
-public **directory**, where a Reddit-style vote + Wilson-ranking system surfaces
-the best ones, and a per-user content-based recommender re-orders the catalog
-around what each person has been practicing.
+**actually talk to an AI interviewer** over your microphone. 
 
 <div align="center">
   <img alt="Dashboard" src="docs/assets/screenshots/dashboard.png" width="49%">
@@ -65,17 +57,17 @@ around what each person has been practicing.
 
 ## Tech stack
 
-| Layer | Choice |
-|---|---|
-| Framework | **Next.js 16** (App Router) + **React 19** + **TypeScript** |
-| Styling | **Tailwind CSS v4**, **shadcn/ui** + **Radix UI**, Geist font |
-| Auth | **Clerk** |
-| Database | **PostgreSQL** via **Prisma 7** (`@prisma/adapter-pg`) |
-| Voice | **Vapi** (`@vapi-ai/web` client, `@vapi-ai/server-sdk`) |
-| LLM | **DeepSeek** (OpenAI-compatible) for builder + grading |
-| Background jobs | **Trigger.dev** (durable, idempotent grading task) |
-| Object storage | **Vercel Blob** (transcripts, raw analysis) |
-| Hosting | **Vercel** |
+| Layer           | Choice                                                                          |
+| --------------- | ------------------------------------------------------------------------------- |
+| Framework       | **Next.js 16** (App Router) + **React 19** + **TypeScript**   |
+| Styling         | **Tailwind CSS v4**, **shadcn/ui** + **Radix UI**, Geist font |
+| Auth            | **Clerk**                                                                 |
+| Database        | **PostgreSQL** via **Prisma 7** (`@prisma/adapter-pg`)            |
+| Voice           | **Vapi** (`@vapi-ai/web` client, `@vapi-ai/server-sdk`)               |
+| LLM             | **DeepSeek** (OpenAI-compatible) for builder + grading                    |
+| Background jobs | **Trigger.dev** (durable, idempotent grading task)                        |
+| Object storage  | **Vercel Blob** (transcripts, raw analysis)                               |
+| Hosting         | **Vercel**                                                                |
 
 ## How it works
 
@@ -135,34 +127,34 @@ npm run dev             # http://localhost:3000
 
 ## Scripts
 
-| Command | What it does |
-|---|---|
-| `npm run dev` | Start the dev server |
-| `npm run build` | Production build |
-| `npm run start` | Serve the production build |
-| `npm run lint` | ESLint |
-| `npm test` | Unit tests (`tests/unit/*.test.ts`, Node test runner) |
-| `npm run db:migrate` | Apply Prisma migrations (dev) |
-| `npm run db:generate` | Generate the Prisma client |
-| `npm run db:seed` | Seed templates + voice personas |
-| `npm run db:studio` | Open Prisma Studio |
-| `npm run db:check` | Sanity-check the DB connection/schema |
+| Command                 | What it does                                            |
+| ----------------------- | ------------------------------------------------------- |
+| `npm run dev`         | Start the dev server                                    |
+| `npm run build`       | Production build                                        |
+| `npm run start`       | Serve the production build                              |
+| `npm run lint`        | ESLint                                                  |
+| `npm test`            | Unit tests (`tests/unit/*.test.ts`, Node test runner) |
+| `npm run db:migrate`  | Apply Prisma migrations (dev)                           |
+| `npm run db:generate` | Generate the Prisma client                              |
+| `npm run db:seed`     | Seed templates + voice personas                         |
+| `npm run db:studio`   | Open Prisma Studio                                      |
+| `npm run db:check`    | Sanity-check the DB connection/schema                   |
 
 ## Documentation
 
-| Doc | Contents |
-|---|---|
-| [Architecture](docs/architecture.md) | System overview, request flows, module map |
-| [Data model](docs/data-model.md) | Prisma schema, relations, indexes |
-| [Voice interview](docs/voice-interview.md) | Vapi call lifecycle, webhook, reconciliation |
-| [Grading](docs/grading.md) | Transcript analysis + durable grading task |
-| [Directory & ranking](docs/directory-ranking.md) | Voting, Wilson rank, auto-flag, recommender |
-| [API reference](docs/api-reference.md) | Every route handler: method, auth, body, response |
-| [Caching](docs/caching-strategy.md) | Cache keys, TTLs, invalidation, ownership boundaries |
-| [Configuration](docs/configuration.md) | Every environment variable |
-| [Development](docs/development.md) | Local setup, testing, conventions |
-| [Deployment](docs/deployment.md) | Vercel + production go-live checklist |
-| [Security](docs/security.md) | Auth, secrets, rate limits, data handling |
+| Doc                                               | Contents                                             |
+| ------------------------------------------------- | ---------------------------------------------------- |
+| [Architecture](docs/architecture.md)                 | System overview, request flows, module map           |
+| [Data model](docs/data-model.md)                     | Prisma schema, relations, indexes                    |
+| [Voice interview](docs/voice-interview.md)           | Vapi call lifecycle, webhook, reconciliation         |
+| [Grading](docs/grading.md)                           | Transcript analysis + durable grading task           |
+| [Directory &amp; ranking](docs/directory-ranking.md) | Voting, Wilson rank, auto-flag, recommender          |
+| [API reference](docs/api-reference.md)               | Every route handler: method, auth, body, response    |
+| [Caching](docs/caching-strategy.md)                  | Cache keys, TTLs, invalidation, ownership boundaries |
+| [Configuration](docs/configuration.md)               | Every environment variable                           |
+| [Development](docs/development.md)                   | Local setup, testing, conventions                    |
+| [Deployment](docs/deployment.md)                     | Vercel + production go-live checklist                |
+| [Security](docs/security.md)                         | Auth, secrets, rate limits, data handling            |
 
 ## Project layout
 
