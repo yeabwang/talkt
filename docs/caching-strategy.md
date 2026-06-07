@@ -1,8 +1,7 @@
 # Caching Strategy
 
-> Deliverable 4 of `context/specs/11-performance.md`. Documents the cache keys,
-> TTLs, invalidation rules, and ownership boundaries introduced by the
-> performance + hardening work.
+> Cache keys, TTLs, invalidation rules, and ownership boundaries for talkt's
+> server- and client-side caching.
 
 ## Why `unstable_cache`, not `use cache`
 

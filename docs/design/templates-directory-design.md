@@ -1,8 +1,8 @@
 # Template Directory, Publishing, Voting & Recommendations — Design
 
 Date: 2026-06-03
-Source spec: `context/specs/08-templates.md`
-Status: Approved design (pending user spec review)
+Status: Implemented — see [Directory & ranking](../directory-ranking.md) for the
+shipped behavior.
 
 ## Goal
 
