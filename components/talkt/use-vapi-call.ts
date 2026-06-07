@@ -107,6 +107,10 @@ export interface UseVapiCall {
   muted: boolean;
   error: string | null;
   noInputDetected: boolean;
+  // False from connect until the interviewer's first word (speech or transcript).
+  // Drives the "connecting to your interviewer…" copy that covers Vapi's
+  // few-second pipeline warm-up so the candidate isn't staring at silence.
+  interviewerStarted: boolean;
   // True once the candidate ended the call themselves (hit End). Drives only the
   // "you ended early" UI copy — the webhook decides completed-vs-abandoned.
   endedManually: boolean;
@@ -134,9 +138,11 @@ export function useVapiCall(): UseVapiCall {
   const [error, setError] = React.useState<string | null>(null);
   const [endedManually, setEndedManually] = React.useState(false);
   const [noInputDetected, setNoInputDetected] = React.useState(false);
+  const [interviewerStarted, setInterviewerStarted] = React.useState(false);
 
   const vapiRef = React.useRef<VapiLike | null>(null);
   const connectedRef = React.useRef(false);
+  const interviewerStartedRef = React.useRef(false);
   const heardUserRef = React.useRef(false);
   const noInputTimer = React.useRef<number | null>(null);
   const userSpeakingTimer = React.useRef<number | null>(null);
@@ -164,6 +170,14 @@ export function useVapiCall(): UseVapiCall {
     setTurns((prev) => mergeTurn(prev, role, text, final));
   }, []);
 
+  // The interviewer has "started" the moment it produces any output — speech or
+  // a transcript. Fire once; cheap idempotent guard avoids extra renders.
+  const markInterviewerStarted = React.useCallback(() => {
+    if (interviewerStartedRef.current) return;
+    interviewerStartedRef.current = true;
+    setInterviewerStarted(true);
+  }, []);
+
   const start = React.useCallback(
     async (assistantId: string, publicKey: string) => {
       if (!assistantId || !publicKey) {
@@ -181,6 +195,8 @@ export function useVapiCall(): UseVapiCall {
       setVolume(0);
       setNoInputDetected(false);
       setEndedManually(false);
+      setInterviewerStarted(false);
+      interviewerStartedRef.current = false;
 
       try {
         const mod = await import("@vapi-ai/web");
@@ -207,7 +223,10 @@ export function useVapiCall(): UseVapiCall {
           setStatus((s) => (s === "error" ? s : disconnectStatus(connectedRef.current)));
         });
 
-        vapi.on("speech-start", () => setAssistantSpeaking(true));
+        vapi.on("speech-start", () => {
+          markInterviewerStarted();
+          setAssistantSpeaking(true);
+        });
         vapi.on("speech-end", () => setAssistantSpeaking(false));
 
         vapi.on("volume-level", (...args: unknown[]) => {
@@ -218,6 +237,7 @@ export function useVapiCall(): UseVapiCall {
         vapi.on("message", (...args: unknown[]) => {
           const t = transcriptFromMessage(args[0]);
           if (!t || !t.text.trim()) return;
+          if (t.role === "assistant") markInterviewerStarted();
           pushTranscript(t.role, t.text, t.final);
           if (t.role === "user") {
             heardUserRef.current = true;
@@ -243,7 +263,7 @@ export function useVapiCall(): UseVapiCall {
         cleanup();
       }
     },
-    [cleanup, pushTranscript],
+    [cleanup, pushTranscript, markInterviewerStarted],
   );
 
   const stop = React.useCallback((manual = false) => {
@@ -268,7 +288,7 @@ export function useVapiCall(): UseVapiCall {
   }, []);
 
   return React.useMemo(
-    () => ({ status, turns, assistantSpeaking, userSpeaking, volume, muted, error, noInputDetected, endedManually, start, stop, toggleMute }),
-    [status, turns, assistantSpeaking, userSpeaking, volume, muted, error, noInputDetected, endedManually, start, stop, toggleMute],
+    () => ({ status, turns, assistantSpeaking, userSpeaking, volume, muted, error, noInputDetected, interviewerStarted, endedManually, start, stop, toggleMute }),
+    [status, turns, assistantSpeaking, userSpeaking, volume, muted, error, noInputDetected, interviewerStarted, endedManually, start, stop, toggleMute],
   );
 }

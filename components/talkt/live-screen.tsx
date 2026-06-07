@@ -220,16 +220,17 @@ export function LiveInterviewScreen({
         <div style={{ height: "100%", width: `${progress}%`, background: "var(--foreground)", transition: "width var(--dur-base) var(--ease-out)" }} />
       </div>
 
-      {call.status === "active" && call.noInputDetected ? (
+      {/* Vapi takes a few seconds to warm the pipeline after connect; show a
+          gentle status until the interviewer's first word so the candidate
+          knows the call is working and isn't sitting in unexplained silence. */}
+      {!call.interviewerStarted && (call.status === "connecting" || call.status === "active") ? (
         <div
           className="fade-in flex items-center justify-center gap-2"
-          role="alert"
-          style={{ padding: "10px 16px", background: "var(--error)", color: "var(--error-foreground)", fontSize: 13, fontWeight: 500, zIndex: 6 }}
+          role="status"
+          style={{ padding: "10px 16px", background: "var(--sidebar)", color: "var(--muted-foreground)", fontSize: 13, fontWeight: 500, zIndex: 6, borderBottom: "1px solid var(--border)" }}
         >
-          <Icon name="mic-off" size={15} />
-          {call.muted
-            ? "You're muted — tap the mic to unmute so the interviewer can hear you."
-            : "We're not hearing you. Check your microphone and that the browser has mic access."}
+          <Icon name="loader" size={15} className="spin" />
+          Connecting to your interviewer…
         </div>
       ) : null}
 
