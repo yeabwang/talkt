@@ -1,13 +1,17 @@
-// Prisma client singleton. Supports Prisma Postgres URLs and direct Postgres URLs.
+// Prisma client singleton. Branches by DATABASE_URL:
+//   - prisma+postgres:// (Prisma Postgres) → connect through Accelerate,
+//     no local driver adapter.
+//   - everything else → direct Postgres (pooled TCP) via @prisma/adapter-pg.
+// Cached on globalThis in development so hot reload reuses one instance.
 import { Prisma, PrismaClient } from "./generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is not set");
-}
-const connectionString: string = process.env.DATABASE_URL;
-
 function createPrisma(): PrismaClient {
+
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("DATABASE_URL is not set");
+  }
   if (connectionString.startsWith("prisma+postgres://")) {
     // Prisma Postgres / Accelerate connection string.
     return new PrismaClient({ accelerateUrl: connectionString });
@@ -46,9 +50,23 @@ function getPrisma(): PrismaClient {
   return cached ?? createPrisma();
 }
 
-export const prisma = getPrisma();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-  globalForPrisma.prismaSchemaSignature = clientSchemaSignature;
+/** Resolve (and cache) the client on first use, persisting in dev for hot reload. */
+function resolvePrisma(): PrismaClient {
+  const client = getPrisma();
+  if (process.env.NODE_ENV !== "production") {
+    globalForPrisma.prisma = client;
+    globalForPrisma.prismaSchemaSignature = clientSchemaSignature;
+  }
+  return client;
 }
+
+// Lazy proxy: nothing connects (and DATABASE_URL is never required) until a
+// property is actually accessed. Keeps Trigger.dev's task-file indexing — which
+// imports this module — from constructing a client at import time.
+export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_target, prop) {
+    const client = resolvePrisma();
+    const value = Reflect.get(client, prop);
+    return typeof value === "function" ? value.bind(client) : value;
+  },
+});
