@@ -6,7 +6,6 @@ import { fetchAttemptStatus, type AttemptStatus } from "@/components/talkt/api";
 import { DIMENSIONS, type Attempt, type Feedback, type FeedbackEvidence, type Interview, type QuestionFeedback } from "@/components/talkt/data";
 import type { TalkTRoute } from "@/components/talkt/app-shell";
 import { Icon, ScoreBar, ScoreRing, SectionHeader, TalkTButton, scoreColorVar } from "@/components/talkt/primitives";
-import { ReportSkeleton } from "@/components/talkt/skeletons";
 
 // Score tier shown in place of a plain "ready" badge.
 function scoreAward(score: number): { label: string; color: string } {
@@ -63,6 +62,7 @@ function LiveResults({
 }) {
   const [feedback, setFeedback] = React.useState<Feedback | null>(null);
   const [failed, setFailed] = React.useState(false);
+  const [attemptStatus, setAttemptStatus] = React.useState<AttemptStatus["status"]>("in_progress");
 
   React.useEffect(() => {
     let active = true;
@@ -77,6 +77,7 @@ function LiveResults({
       try {
         const status = await fetchAttemptStatus(attemptId);
         if (!active) return;
+        setAttemptStatus(status.status);
         if (status.status === "ready") {
           setFeedback(toFeedback(status));
           return;
@@ -104,10 +105,26 @@ function LiveResults({
   }, [attemptId]);
 
   if (failed) return <ScoringFailed interview={interview} navigate={navigate} startInterview={startInterview} />;
-  // A stored report is already graded — show the calm app skeleton while it
-  // loads, not the live grading-steps screen (that's only for fresh scoring).
-  if (!feedback) return <ReportSkeleton />;
+  if (!feedback) return <GradingScreen interview={interview} status={attemptStatus} />;
   return <FeedbackReady interview={interview} attempt={null} feedback={feedback} navigate={navigate} startInterview={startInterview} />;
+}
+
+/** Fresh post-call state while the Vapi webhook and Trigger task finish. */
+function GradingScreen({ interview, status }: { interview: Interview; status: AttemptStatus["status"] }) {
+  const analyzing = status === "analyzing";
+  return (
+    <div className="bg-grid relative" style={{ minHeight: "calc(100vh - var(--header-h))", display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
+      <div className="relative text-center fade-in" style={{ maxWidth: 460 }}>
+        <Icon name="loader" size={28} className="spin muted" />
+        <h2 className="h2" style={{ margin: "16px 0 8px" }}>
+          {analyzing ? "Analyzing your interview" : "Preparing your report"}
+        </h2>
+        <p className="caption" style={{ margin: 0 }}>
+          {interview.title}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 /** Shared "couldn't score this attempt" terminal state. */

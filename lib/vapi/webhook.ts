@@ -88,9 +88,22 @@ function textFrom(value: unknown): string {
   return textFrom(rec.text) || textFrom(rec.content);
 }
 
+function messagesFromTranscript(transcript: unknown): ReportMessage[] {
+  if (typeof transcript !== "string") return [];
+  return transcript
+    .split(/\r?\n/)
+    .map((line): ReportMessage | null => {
+      const match = line.match(/^\s*(ai|assistant|bot|user|customer)\s*:\s*(.+)\s*$/i);
+      if (!match) return null;
+      const speaker = match[1].toLowerCase();
+      return { role: speaker === "user" || speaker === "customer" ? "user" : "assistant", message: match[2] };
+    })
+    .filter((m): m is ReportMessage => m !== null);
+}
+
 function assistantClosed(transcript: Turn[]): boolean {
   const lastAssistant = [...transcript].reverse().find((t) => t.role === "assistant")?.text.toLowerCase() ?? "";
-  return /\b(that'?s everything|feedback'?s being|feedback is being|take care|you'?ll see it in a moment)\b/.test(lastAssistant);
+  return /\b(that'?s (everything|the interview complete)|interview is complete|feedback'?s being|feedback is being|report'?s being|report is being|being prepared|prepared now|you'?ll see it in a moment)\b/.test(lastAssistant);
 }
 
 /** Classify the call. Abandoned when there is no candidate speech, or the end
@@ -128,4 +141,26 @@ export function mapReport(msg: unknown): ParsedReport {
   const endedReason = typeof m.endedReason === "string" ? m.endedReason : typeof call.endedReason === "string" ? call.endedReason : undefined;
 
   return { attemptId, assistantId, transcript, outcome: classifyOutcome(transcript, endedReason) };
+}
+
+/** Map a completed Vapi `/call` record into the same shape as an
+ * end-of-call-report. This repairs local development runs where the assistant
+ * server URL points at localhost and Vapi cannot deliver the webhook. */
+export function mapCallRecord(call: unknown, attemptId: string | null): ParsedReport | null {
+  const c = (call ?? {}) as Record<string, unknown>;
+  const status = typeof c.status === "string" ? c.status : undefined;
+  if (status && status !== "ended") return null;
+
+  const assistantId = typeof c.assistantId === "string" ? c.assistantId : null;
+  const endedReason = typeof c.endedReason === "string" ? c.endedReason : undefined;
+  const artifact = (c.artifact ?? {}) as Record<string, unknown>;
+  const messages = c.messages ?? artifact.messages ?? artifact.messagesOpenAIFormatted ?? messagesFromTranscript(c.transcript);
+
+  return mapReport({
+    metadata: attemptId ? { attemptId } : undefined,
+    assistant: assistantId ? { id: assistantId } : undefined,
+    call: { assistantId, endedReason },
+    endedReason,
+    messages,
+  });
 }

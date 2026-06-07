@@ -65,7 +65,7 @@ test("carries the cap, the end-call tool, and attempt metadata", () => {
   const a = buildVapiAssistant(job({ maxDurationSeconds: 600 }), env);
   assert.equal(a.maxDurationSeconds, 600);
   assert.deepEqual(a.model.tools, [{ type: "endCall" }]);
-  assert.deepEqual(a.endCallPhrases, ["Take care."]);
+  assert.deepEqual(a.endCallPhrases, ["you'll see it in a moment. Take care."]);
   assert.deepEqual(a.metadata, { attemptId: "a1" });
 });
 

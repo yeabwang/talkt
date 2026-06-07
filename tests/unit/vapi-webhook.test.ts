@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
-import { classifyOutcome, mapReport, verifyVapiRequest, verifyVapiSecret } from "@/lib/vapi/webhook";
+import { classifyOutcome, mapCallRecord, mapReport, verifyVapiRequest, verifyVapiSecret } from "@/lib/vapi/webhook";
 
 test("verifyVapiSecret: match / mismatch / missing / prod-no-secret", () => {
   assert.equal(verifyVapiSecret("s", "s", true), "ok");
@@ -90,9 +90,64 @@ test("classifyOutcome: customer hangup after the assistant closes -> completed",
   assert.equal(classifyOutcome(t, "customer-ended-call"), "completed");
 });
 
+test("classifyOutcome: report handoff phrase marks a post-close hangup completed", () => {
+  const t = [
+    { role: "assistant" as const, text: "Final question?" },
+    { role: "user" as const, text: "Final answer." },
+    { role: "assistant" as const, text: "That's the interview complete. Your report is being prepared now, and you'll see it in a moment. Take care." },
+  ];
+  assert.equal(classifyOutcome(t, "customer-ended-call"), "completed");
+});
+
 test("mapReport falls back to call.assistantId when assistant.id absent", () => {
   const r = mapReport({ call: { assistantId: "as_9" }, messages: [] });
   assert.equal(r.assistantId, "as_9");
   assert.equal(r.attemptId, null);
   assert.equal(r.outcome, "abandoned");
+});
+
+test("mapCallRecord maps an ended Vapi call into a report", () => {
+  const r = mapCallRecord(
+    {
+      id: "call_1",
+      assistantId: "as_1",
+      status: "ended",
+      endedReason: "assistant-ended-call",
+      messages: [
+        { role: "bot", message: "Q1?" },
+        { role: "user", message: "Answer." },
+      ],
+    },
+    "att_1",
+  );
+  assert.ok(r);
+  assert.equal(r.attemptId, "att_1");
+  assert.equal(r.assistantId, "as_1");
+  assert.equal(r.outcome, "completed");
+  assert.deepEqual(r.transcript, [
+    { role: "assistant", text: "Q1?" },
+    { role: "user", text: "Answer." },
+  ]);
+});
+
+test("mapCallRecord can parse transcript text when structured messages are absent", () => {
+  const r = mapCallRecord(
+    {
+      assistantId: "as_1",
+      status: "ended",
+      endedReason: "assistant-ended-call",
+      transcript: "AI: Q1?\nUser: Answer.",
+    },
+    "att_1",
+  );
+  assert.ok(r);
+  assert.equal(r.outcome, "completed");
+  assert.deepEqual(r.transcript, [
+    { role: "assistant", text: "Q1?" },
+    { role: "user", text: "Answer." },
+  ]);
+});
+
+test("mapCallRecord ignores active Vapi calls", () => {
+  assert.equal(mapCallRecord({ status: "in-progress" }, "att_1"), null);
 });

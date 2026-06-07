@@ -17,6 +17,8 @@ export interface SessionEndedBody {
 export interface SessionEndedDeps {
   findAttempt: (attemptId: string) => Promise<{ id: string; status: string } | null>;
   markAbandoned: (attemptId: string) => Promise<void>;
+  markAnalyzing: (attemptId: string) => Promise<void>;
+  markFailed: (attemptId: string) => Promise<void>;
   triggerGrade: (args: { attemptId: string; transcript: Turn[]; idempotencyKey: string }) => Promise<void>;
 }
 
@@ -36,10 +38,16 @@ export async function processSessionEnded(body: SessionEndedBody, deps: SessionE
     return "abandoned";
   }
 
-  await deps.triggerGrade({
-    attemptId: attempt.id,
-    transcript: body.transcript,
-    idempotencyKey: `grade-${attempt.id}`,
-  });
+  await deps.markAnalyzing(attempt.id);
+  try {
+    await deps.triggerGrade({
+      attemptId: attempt.id,
+      transcript: body.transcript,
+      idempotencyKey: `grade-${attempt.id}`,
+    });
+  } catch (error) {
+    await deps.markFailed(attempt.id);
+    throw error;
+  }
   return "graded";
 }

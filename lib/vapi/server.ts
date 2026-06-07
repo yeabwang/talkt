@@ -8,11 +8,42 @@ import type { AssistantPayload } from "@/lib/vapi/assistant";
 
 let client: VapiClient | null = null;
 
+export interface VapiCallRecord {
+  id?: unknown;
+  assistantId?: unknown;
+  status?: unknown;
+  endedReason?: unknown;
+  messages?: unknown;
+  artifact?: unknown;
+  transcript?: unknown;
+}
+
 function getClient(): VapiClient {
   const token = process.env.VAPI_PRIVATE_KEY;
   if (!token) throw new Error("VAPI_PRIVATE_KEY is not set — cannot create the interview assistant.");
   client ??= new VapiClient({ token });
   return client;
+}
+
+async function vapiJson(path: string): Promise<unknown> {
+  const token = process.env.VAPI_PRIVATE_KEY;
+  if (!token) throw new Error("VAPI_PRIVATE_KEY is not set.");
+  const res = await fetch(`https://api.vapi.ai${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Vapi API ${path} failed (${res.status}): ${body.slice(0, 240)}`);
+  }
+  return await res.json();
+}
+
+/** List web/phone calls for one assistant, newest first. Used to repair missed
+ * local-dev webhooks and rare callback delivery failures. */
+export async function listCallsForAssistant(assistantId: string): Promise<VapiCallRecord[]> {
+  const data = await vapiJson(`/call?assistantId=${encodeURIComponent(assistantId)}&limit=5`);
+  return Array.isArray(data) ? (data as VapiCallRecord[]) : [];
 }
 
 /** Create the ephemeral assistant; returns its id. */

@@ -213,20 +213,23 @@ function NewAction({ icon, title, desc, cta, onClick, primary }: { icon: string;
 }
 
 function Sparkline({ data, width = 72, height = 26 }: { data: number[]; width?: number; height?: number }) {
+  if (!data.length) return null;
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = max - min || 1;
   const points = data.map((value, index) => {
-    const x = (index / (data.length - 1)) * width;
+    // Single-point data has no span; pin x to the right edge instead of dividing by zero (NaN).
+    const x = data.length > 1 ? (index / (data.length - 1)) * width : width;
     const y = height - ((value - min) / range) * (height - 4) - 2;
     return [x, y] as const;
   });
   const path = points.map((point, index) => `${index ? "L" : "M"}${point[0].toFixed(1)} ${point[1].toFixed(1)}`).join(" ");
+  const lastPoint = points[points.length - 1];
 
   return (
     <svg width={width} height={height} style={{ overflow: "visible" }} aria-hidden="true">
       <path d={path} fill="none" stroke="var(--muted-foreground)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={points[points.length - 1][0]} cy={points[points.length - 1][1]} r="2.5" fill={scoreColorVar(data[data.length - 1])} />
+      <circle cx={lastPoint[0]} cy={lastPoint[1]} r="2.5" fill={scoreColorVar(data[data.length - 1])} />
     </svg>
   );
 }

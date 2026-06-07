@@ -5,6 +5,7 @@ import {
   assistantSpeechFromMessage,
   disconnectStatus,
   mergeTurn,
+  stopAction,
   transcriptBlocks,
   transcriptFromMessage,
   type TranscriptTurn,
@@ -54,6 +55,12 @@ test("transcriptBlocks coalesces consecutive same-role turns", () => {
 test("disconnectStatus distinguishes connect failure from normal end", () => {
   assert.equal(disconnectStatus(true), "ended");
   assert.equal(disconnectStatus(false), "error");
+});
+
+test("stopAction only sends the Vapi end message after the call has joined", () => {
+  assert.equal(stopAction(true, true), "end");
+  assert.equal(stopAction(true, false), "stop");
+  assert.equal(stopAction(false, true), "stop");
 });
 
 test("transcriptFromMessage maps Vapi transcript messages, ignores others", () => {

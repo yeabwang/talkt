@@ -54,6 +54,17 @@ export async function findAttemptForWebhook(
   return { id: row.id, status: row.status, interview: toTemplateDTO(row.interview as InterviewRow) };
 }
 
+/** Owner-scoped lightweight row for repairing a missed Vapi callback. */
+export async function findAttemptForReconcile(
+  attemptId: string,
+  userId: string,
+): Promise<{ id: string; status: string; vapiAssistantId: string | null; vapiCallId: string | null; startedAt: Date } | null> {
+  return await prisma.attempt.findFirst({
+    where: { id: attemptId, userId },
+    select: { id: true, status: true, vapiAssistantId: true, vapiCallId: true, startedAt: true },
+  });
+}
+
 /**
  * Flag an `in_progress` attempt abandoned: the candidate left mid-interview, so
  * it is never graded and stays out of history. The worker's session-ended

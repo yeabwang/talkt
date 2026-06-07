@@ -23,6 +23,15 @@ import { createAssistant, deleteAssistant } from "@/lib/vapi/server";
 // is well above real use and blocks rapid-fire abuse.
 const callLimiter = createRateLimiter({ limit: 10, windowMs: 60_000 });
 
+function isLocalUrl(value: string): boolean {
+  try {
+    const host = new URL(value).hostname;
+    return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1";
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { userId } = await auth();
   if (!userId) return unauthorized();
@@ -33,10 +42,18 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
   const publicKey = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY;
   const privateKey = process.env.VAPI_PRIVATE_KEY;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const webhookUrl = process.env.VAPI_WEBHOOK_URL || appUrl;
   const webhookSecret = process.env.VAPI_WEBHOOK_SECRET;
-  if (!publicKey || !privateKey || !appUrl || !webhookSecret) {
+  if (!publicKey || !privateKey || !appUrl || !webhookUrl || !webhookSecret) {
     console.error("[call] Vapi env not fully configured");
     return jsonError("Voice service is not configured.", 503);
+  }
+  if (process.env.NODE_ENV === "production" && (!webhookUrl || isLocalUrl(webhookUrl))) {
+    console.error("[call] Vapi webhook URL must be public in production");
+    return jsonError("Voice callback is not configured.", 503);
+  }
+  if (webhookUrl && isLocalUrl(webhookUrl)) {
+    console.warn("[call] Vapi webhook URL is local; using Vapi call reconciliation fallback for grading");
   }
 
   const { id } = await ctx.params;
@@ -60,7 +77,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
   });
 
   const assistantPayload = buildVapiAssistant(job, {
-    appUrl,
+    appUrl: webhookUrl,
     webhookSecret,
     webhookCredentialId: process.env.VAPI_WEBHOOK_CREDENTIAL_ID,
     modelProvider: process.env.VAPI_MODEL_PROVIDER || "openai",

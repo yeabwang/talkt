@@ -152,10 +152,40 @@ export interface UseVapiCall {
 // Minimal structural type for the Vapi client (lazy-loaded in start()).
 interface VapiLike {
   start: (assistantId: string) => Promise<unknown>;
-  stop: () => void;
+  stop: () => void | Promise<void>;
+  end: () => void;
   setMuted: (muted: boolean) => void;
   on: (event: string, cb: (...args: unknown[]) => void) => void;
   removeAllListeners: () => void;
+}
+
+const UNMOUNT_CLEANUP_DELAY_MS = 50;
+
+// Daily only supports one active call object by default. Keep that invariant
+// across fast route changes/remounts instead of opting into multiple instances.
+let activeVapiClient: VapiLike | null = null;
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return Boolean(value && typeof value === "object" && "then" in value && typeof (value as { then?: unknown }).then === "function");
+}
+
+async function destroyVapiClient(vapi: VapiLike | null): Promise<void> {
+  if (!vapi) return;
+  try {
+    vapi.removeAllListeners();
+  } catch {
+    /* ignore */
+  }
+  try {
+    const stopped = vapi.stop();
+    if (isPromiseLike(stopped)) await stopped;
+  } catch {
+    /* ignore */
+  }
+}
+
+export function stopAction(manual: boolean, connected: boolean): "end" | "stop" {
+  return manual && connected ? "end" : "stop";
 }
 
 export function useVapiCall(): UseVapiCall {
@@ -175,24 +205,31 @@ export function useVapiCall(): UseVapiCall {
   const userSpeakingTimer = React.useRef<number | null>(null);
   const assistantSpeechBuffer = React.useRef<Map<string, { text: string; segmentId: string }>>(new Map());
   const assistantSpeechSeenRef = React.useRef(false);
+  const unmountCleanupTimer = React.useRef<number | null>(null);
+  const startTokenRef = React.useRef(0);
 
   const cleanup = React.useCallback(() => {
+    startTokenRef.current += 1;
     if (userSpeakingTimer.current) window.clearTimeout(userSpeakingTimer.current);
     userSpeakingTimer.current = null;
+    if (unmountCleanupTimer.current) window.clearTimeout(unmountCleanupTimer.current);
+    unmountCleanupTimer.current = null;
     assistantSpeechBuffer.current.clear();
     const v = vapiRef.current;
-    if (v) {
-      try {
-        v.removeAllListeners();
-        v.stop();
-      } catch {
-        /* ignore */
-      }
-      vapiRef.current = null;
-    }
+    vapiRef.current = null;
+    if (activeVapiClient === v) activeVapiClient = null;
+    connectedRef.current = false;
+    void destroyVapiClient(v);
   }, []);
 
-  React.useEffect(() => cleanup, [cleanup]);
+  React.useEffect(() => {
+    if (unmountCleanupTimer.current) window.clearTimeout(unmountCleanupTimer.current);
+    unmountCleanupTimer.current = null;
+
+    return () => {
+      unmountCleanupTimer.current = window.setTimeout(cleanup, UNMOUNT_CLEANUP_DELAY_MS);
+    };
+  }, [cleanup]);
 
   const pushTranscript = React.useCallback((role: "assistant" | "user", text: string, final: boolean, segmentId?: string) => {
     setTurns((prev) => mergeTurn(prev, role, text, final, segmentId));
@@ -232,41 +269,71 @@ export function useVapiCall(): UseVapiCall {
       setEndedManually(false);
       setInterviewerStarted(false);
       interviewerStartedRef.current = false;
+      if (unmountCleanupTimer.current) window.clearTimeout(unmountCleanupTimer.current);
+      unmountCleanupTimer.current = null;
+
+      const token = (startTokenRef.current += 1);
 
       try {
         const mod = await import("@vapi-ai/web");
+        if (startTokenRef.current !== token) return;
+
+        const previous = vapiRef.current;
+        vapiRef.current = null;
+        if (previous) {
+          if (activeVapiClient === previous) activeVapiClient = null;
+          await destroyVapiClient(previous);
+        }
+
+        const active = activeVapiClient;
+        if (active) {
+          activeVapiClient = null;
+          await destroyVapiClient(active);
+        }
+        if (startTokenRef.current !== token) return;
+
         const Vapi = mod.default;
         const vapi = new Vapi(publicKey) as unknown as VapiLike;
+        const isCurrent = () => startTokenRef.current === token && vapiRef.current === vapi;
         vapiRef.current = vapi;
+        activeVapiClient = vapi;
 
         vapi.on("call-start", () => {
+          if (!isCurrent()) return;
           connectedRef.current = true;
           setStatus("active");
         });
 
         vapi.on("call-end", () => {
+          if (!isCurrent()) return;
           flushAssistantSpeech();
           setAssistantSpeaking(false);
           setUserSpeaking(false);
           setVolume(0);
+          if (activeVapiClient === vapi) activeVapiClient = null;
+          vapiRef.current = null;
           setStatus((s) => (s === "error" ? s : disconnectStatus(connectedRef.current)));
         });
 
         vapi.on("speech-start", () => {
+          if (!isCurrent()) return;
           markInterviewerStarted();
           setAssistantSpeaking(true);
         });
         vapi.on("speech-end", () => {
+          if (!isCurrent()) return;
           setAssistantSpeaking(false);
           flushAssistantSpeech();
         });
 
         vapi.on("volume-level", (...args: unknown[]) => {
+          if (!isCurrent()) return;
           const level = typeof args[0] === "number" ? args[0] : 0;
           setVolume(level);
         });
 
         vapi.on("message", (...args: unknown[]) => {
+          if (!isCurrent()) return;
           const speech = assistantSpeechFromMessage(args[0]);
           if (speech) {
             assistantSpeechSeenRef.current = true;
@@ -289,6 +356,7 @@ export function useVapiCall(): UseVapiCall {
         });
 
         vapi.on("error", (...args: unknown[]) => {
+          if (!isCurrent()) return;
           const err = args[0];
           const msg = err instanceof Error ? err.message : typeof err === "string" ? err : "Voice service error";
           setError(msg);
@@ -296,7 +364,9 @@ export function useVapiCall(): UseVapiCall {
         });
 
         await vapi.start(assistantId);
+        if (!isCurrent()) await destroyVapiClient(vapi);
       } catch (err) {
+        if (startTokenRef.current !== token) return;
         setError(err instanceof Error ? err.message : "Failed to start call");
         setStatus("error");
         cleanup();
@@ -308,7 +378,15 @@ export function useVapiCall(): UseVapiCall {
   const stop = React.useCallback((manual = false) => {
     if (manual) setEndedManually(true);
     try {
-      vapiRef.current?.stop();
+      const vapi = vapiRef.current;
+      if (!vapi) {
+        if (manual) setStatus("ended");
+        return;
+      }
+      const action = stopAction(manual, connectedRef.current);
+      if (action === "end") vapi.end();
+      else void vapi.stop();
+      if (manual) setStatus((s) => (s === "error" ? s : "ended"));
     } catch {
       /* ignore */
     }

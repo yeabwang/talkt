@@ -64,7 +64,7 @@ const PATIENT_NO_PUNCTUATION_SECONDS = 2.2; // wait this long on a trailing paus
 const WEBHOOK_TIMEOUT_SECONDS = 20;
 
 export interface BuildAssistantEnv {
-  appUrl: string; // NEXT_PUBLIC_APP_URL
+  appUrl: string; // public webhook base URL (VAPI_WEBHOOK_URL or NEXT_PUBLIC_APP_URL)
   webhookSecret: string; // VAPI_WEBHOOK_SECRET
   webhookCredentialId?: string; // optional Vapi credential id for webhook auth
   modelProvider: string; // VAPI_MODEL_PROVIDER
@@ -126,7 +126,7 @@ export function buildVapiAssistant(job: InterviewJob, env: BuildAssistantEnv): A
     },
     server,
     serverMessages: ["end-of-call-report"],
-    endCallPhrases: ["Take care."],
+    endCallPhrases: ["you'll see it in a moment. Take care."],
     metadata: { attemptId: job.attemptId },
   };
 }

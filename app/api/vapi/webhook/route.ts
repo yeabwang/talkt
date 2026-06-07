@@ -14,7 +14,7 @@ import type { NextRequest } from "next/server";
 
 import type { gradeAttempt } from "@/trigger/grade-attempt";
 import { jsonError } from "@/lib/api";
-import { findAttemptForWebhook, markAbandoned } from "@/lib/db/attempts";
+import { findAttemptForWebhook, markAbandoned, markAnalyzing, markFailed } from "@/lib/db/attempts";
 import { processSessionEnded, type SessionEndedDeps } from "@/lib/session-ended";
 import { deleteAssistant } from "@/lib/vapi/server";
 import { mapReport, verifyVapiRequest } from "@/lib/vapi/webhook";
@@ -27,6 +27,8 @@ const deps: SessionEndedDeps = {
     return a ? { id: a.id, status: a.status } : null;
   },
   markAbandoned,
+  markAnalyzing,
+  markFailed,
   triggerGrade: async ({ attemptId, transcript, idempotencyKey }) => {
     await tasks.trigger<typeof gradeAttempt>(
       "grade-attempt",
@@ -75,7 +77,14 @@ export async function POST(req: NextRequest) {
   }
 
   if (attemptId) {
-    await processSessionEnded({ attemptId, transcript: report.transcript, outcome: report.outcome }, deps);
+    const result = await processSessionEnded({ attemptId, transcript: report.transcript, outcome: report.outcome }, deps);
+    console.info("[vapi/webhook] processed end-of-call-report", {
+      attemptId,
+      assistantId: report.assistantId,
+      outcome: report.outcome,
+      result,
+      transcriptTurns: report.transcript.length,
+    });
   } else {
     console.warn("[vapi/webhook] end-of-call-report with no resolvable attempt");
   }
