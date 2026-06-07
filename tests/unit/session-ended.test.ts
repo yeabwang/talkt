@@ -6,7 +6,7 @@ import {
   type SessionEndedDeps,
 } from "../../lib/session-ended";
 
-// ── processSessionEnded ──────────────────────────────────────────────────────
+// processSessionEnded
 
 interface Spy {
   deps: SessionEndedDeps;

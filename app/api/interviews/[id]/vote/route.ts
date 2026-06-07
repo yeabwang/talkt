@@ -1,5 +1,4 @@
-// POST /api/interviews/[id]/vote — cast (1 / -1) or clear (0) the caller's vote.
-// Returns fresh tallies + the caller's current vote only; never voter identities.
+// POST /api/interviews/[id]/vote: cast, flip, or clear the caller's vote.
 import { auth } from "@clerk/nextjs/server";
 import type { NextRequest } from "next/server";
 

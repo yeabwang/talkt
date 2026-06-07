@@ -18,8 +18,7 @@ export function LobbyScreen({
   interview: Interview;
   user: AppUser;
   navigate: (route: TalkTRoute, params?: Record<string, unknown>) => void;
-  // Hands the live screen the server-resolved call session + the optional local
-  // camera stream (self-view only; video is never sent to the interviewer).
+  // Pass the call session and optional local self-view stream to the live screen.
   onJoin: (session: CallSession, camStream: MediaStream | null) => void;
 }) {
   const [micState, setMicState] = React.useState<MicState>("requesting");
@@ -31,9 +30,7 @@ export function LobbyScreen({
   const camStreamRef = React.useRef<MediaStream | null>(null);
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
 
-  // Ask for microphone authorization up front so the permission prompt isn't a
-  // surprise mid-join. We only need the grant; the preview stream is released
-  // immediately so the LiveKit room can acquire the device during join.
+  // Request microphone access before the user joins the call.
   React.useEffect(() => {
     let cancelled = false;
     navigator.mediaDevices
@@ -50,7 +47,7 @@ export function LobbyScreen({
     };
   }, []);
 
-  // Acquire / release the local camera as the toggle flips. Local self-view only.
+  // Acquire and release the local self-view camera stream.
   React.useEffect(() => {
     let cancelled = false;
     if (camOn) {
@@ -92,8 +89,7 @@ export function LobbyScreen({
     setError(null);
     try {
       const session = await startCall(interview.id);
-      // Hand the camera stream to the live screen (or null when off). We hand off
-      // ownership; the live screen is responsible for stopping it.
+      // Transfer stream ownership to the live screen.
       const cam = camStreamRef.current;
       camStreamRef.current = null;
       onJoin(session, cam);
@@ -132,7 +128,7 @@ export function LobbyScreen({
             >
               <div className="bg-dot-grid" style={{ position: "absolute", inset: 0, opacity: 0.5 }} />
 
-              {/* Local camera self-view (audio-only call; video stays in the browser). */}
+              {/* Local camera self-view; video stays in the browser. */}
               <video
                 ref={videoRef}
                 autoPlay

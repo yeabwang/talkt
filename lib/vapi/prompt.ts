@@ -1,12 +1,7 @@
-// Interviewer prompt. Pure functions, no provider imports.
-//
-// Product-critical rules: never reveal answers, ask one question at a time, give
-// neutral acknowledgements, lead the interview, and close warmly. The hard time
-// cap is enforced by Vapi (assistant.maxDurationSeconds); the model ends the call
-// itself via the end-call tool after saying goodbye, not by prompt text alone.
+// Prompt assembly for the spoken Vapi interviewer.
 import type { InterviewJob } from "@/lib/vapi/job";
 
-// Per-persona spoken delivery cue, keyed by voice-agent key.
+// Per-persona spoken delivery cues.
 export const DELIVERY_CUES: Record<string, string> = {
   adi: "Speak calmly and in a measured, unhurried way.",
   ren: "Speak warmly and directly, naturally encouraging.",
@@ -14,7 +9,7 @@ export const DELIVERY_CUES: Record<string, string> = {
   mira: "Speak gently and patiently, leaving space after questions.",
 };
 
-/** The interviewer's system prompt, assembled from the job. */
+/** Assemble the interviewer's system prompt. */
 export function systemPrompt(job: InterviewJob): string {
   const { interviewTitle, questions, languageLabel, interviewerName, persona } = job;
   const deliveryCue = DELIVERY_CUES[persona] ?? "";
@@ -63,8 +58,7 @@ export function systemPrompt(job: InterviewJob): string {
   ].join("\n");
 }
 
-/** The fixed opening line the assistant speaks first (firstMessage). It greets
- * AND asks the first question so the interviewer leads from the first second. */
+/** First spoken line: greet briefly and ask question one. */
 export function firstMessage(job: InterviewJob): string {
   const greetName = job.candidateFirstName ? `, ${job.candidateFirstName}` : "";
   const firstQuestion = job.questions[0];

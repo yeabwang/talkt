@@ -72,8 +72,7 @@ export function BuilderScreen({
   const [publishError, setPublishError] = React.useState<string | null>(null);
   const [published, setPublished] = React.useState(false);
   const [starting, setStarting] = React.useState(false);
-  // The persisted (private) DB row for this built interview, created once and
-  // shared by Start and Publish.
+  // One private row is shared by Start and Publish.
   const persistedRef = React.useRef<Interview | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const threadRef = React.useRef<ThreadMessage[]>(thread);
@@ -125,8 +124,7 @@ export function BuilderScreen({
     [language],
   );
 
-  // Open the conversation once on mount. Guard against React StrictMode's
-  // double-invoked mount effect (dev) firing two opener requests.
+  // Open the conversation once, even under StrictMode remount checks.
   React.useEffect(() => {
     if (openedRef.current) return;
     openedRef.current = true;
@@ -165,8 +163,7 @@ export function BuilderScreen({
     };
   }, [summary, language, turn]);
 
-  // Persist the built interview as a private DB row exactly once. Both Start and
-  // Publish funnel through here so they operate on the same row.
+  // Persist once so Start and Publish operate on the same row.
   const ensurePersisted = React.useCallback(async (): Promise<Interview> => {
     if (persistedRef.current) return persistedRef.current;
     const saved = await persistBuiltInterview(buildPayload());
@@ -174,8 +171,7 @@ export function BuilderScreen({
     return saved;
   }, [buildPayload]);
 
-  // Local-only interview used if persistence fails (e.g. DB unreachable), so the
-  // user can still run it without a DB row.
+  // Local fallback lets the user practice if persistence is unavailable.
   const localInterview = React.useCallback((): Interview => {
     const qs = turn?.questions ?? [];
     const role = summary.role || summary.title || "Custom interview";
@@ -201,8 +197,7 @@ export function BuilderScreen({
     };
   }, [summary, language, turn]);
 
-  // Start saves the interview as private (giving it a real DB row), then opens
-  // the lobby. Falls back to a local-only interview if persistence fails.
+  // Start prefers a persisted interview, then falls back to local state.
   const startBuiltInterview = async () => {
     if (!turn || !ready || starting) return;
     setStarting(true);
@@ -469,7 +464,7 @@ function DraftRow({ label, value, last }: { label: string; value: React.ReactNod
   );
 }
 
-// Deterministic voice pick so the same role keeps the same interviewer.
+// Keep the same role mapped to the same default interviewer.
 function pickVoice(role: string): string {
   if (!role) return "ren";
   return VOICES[role.length % VOICES.length].id;

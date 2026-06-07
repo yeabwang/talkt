@@ -1,18 +1,16 @@
-// The interview "job": the resolved, ordered interviewer script the assistant
-// builder consumes. Ported from the old lib/livekit/job.ts — same fields, minus
-// anything LiveKit-specific. Pure data; no SDK imports.
+// Resolved interviewer script consumed by the Vapi assistant builder.
 import type { Interview } from "@/components/talkt/data";
 
 export interface InterviewJob {
   attemptId: string;
   interviewTitle: string;
-  interviewerName: string; // resolved persona display name (e.g. "Adi")
-  persona: string; // voice-agent key: adi|ren|kai|mira
-  languageCode: string; // ISO 639-1, e.g. "en"
-  languageLabel: string; // display label for the prompt, e.g. "English"
-  questions: string[]; // ordered interviewer script
+  interviewerName: string;
+  persona: string;
+  languageCode: string;
+  languageLabel: string;
+  questions: string[];
   candidateFirstName?: string;
-  maxDurationSeconds: number; // hard cap; Vapi enforces via assistant.maxDurationSeconds
+  maxDurationSeconds: number;
 }
 
 export interface BuildInterviewJobArgs {
@@ -25,8 +23,7 @@ export interface BuildInterviewJobArgs {
   candidateFirstName?: string;
 }
 
-/** Build the job. `maxDurationSeconds` preserves the previous cap math
- * (estimated minutes + 2, clamped to [120, 3600]). */
+/** Build the job and clamp the Vapi duration cap. */
 export function buildInterviewJob(args: BuildInterviewJobArgs): InterviewJob {
   const { interview, persona, languageCode, languageLabel, attemptId, interviewerName, candidateFirstName } = args;
   return {

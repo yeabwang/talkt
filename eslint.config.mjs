@@ -5,9 +5,8 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
-  // Override default ignores of eslint-config-next.
+  // Keep Next's generated files out of lint while adding project-generated outputs.
   globalIgnores([
-    // Default ignores of eslint-config-next:
     ".next/**",
     ".trigger/**",
     "agent/dist/**",

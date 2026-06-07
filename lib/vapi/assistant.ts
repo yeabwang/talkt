@@ -1,16 +1,10 @@
-// Pure builder: InterviewJob -> Vapi assistant create payload. No SDK/network
-// import so it is unit-testable. The model + transcriber are Vapi-native (billed
-// by Vapi, no provider key); the webhook URL/auth and the model/transcriber
-// selection come from env; everything else is derived from the job.
+// Builds the Vapi assistant payload from an InterviewJob and environment config.
 import type { InterviewJob } from "@/lib/vapi/job";
 import { firstMessage, systemPrompt } from "@/lib/vapi/prompt";
 import { resolveVapiVoice } from "@/lib/vapi/voices";
 
-// NOTE (verified against installed @vapi-ai/server-sdk@1.2.0):
-// - CreateAssistantDto has NO `endCallFunctionEnabled` and NO `silenceTimeoutSeconds`.
-// - The model ends the call via an end-call TOOL: model.tools = [{ type: "endCall" }]
-//   (GoogleModel.tools accepts it). The hard cap stays maxDurationSeconds; Vapi's
-//   default silence handling replaces the old away-backstop.
+// SDK compatibility note: end calls are model tools, while maxDurationSeconds is
+// the hard cap enforced by Vapi.
 export interface AssistantPayload {
   name: string;
   firstMessage: string;
@@ -19,8 +13,8 @@ export interface AssistantPayload {
   maxDurationSeconds: number;
   clientMessages: ["transcript", "speech-update", "status-update", "assistant.speechStarted"];
   model: {
-    provider: string; // e.g. "google" | "openai"
-    model: string; // e.g. "gemini-2.5-flash"
+    provider: string;
+    model: string;
     temperature: number;
     messages: { role: "system"; content: string }[];
     tools: { type: "endCall" }[];
@@ -28,11 +22,7 @@ export interface AssistantPayload {
   modelOutputInMessagesEnabled: true;
   voice: { provider: string; voiceId: string };
   transcriber: { provider: string; model: string; language: string };
-  // Turn-taking patience. Keeps the interviewer from cutting in when the
-  // candidate pauses to think or uses filler words (replaces the old LiveKit
-  // endpointing config). English uses LiveKit smart (model-based) endpointing;
-  // other languages (where smart endpointing isn't supported) fall back to
-  // generous transcription-silence timeouts.
+  // Turn-taking patience prevents interruptions during thoughtful pauses.
   startSpeakingPlan:
     | { waitSeconds: number; smartEndpointingPlan: { provider: "livekit" } }
     | {
@@ -57,21 +47,20 @@ export interface AssistantPayload {
   metadata: { attemptId: string };
 }
 
-// How long the interviewer waits after the candidate seems to stop. Higher =
-// more patient. Tuned for "thinking out loud" interview cadence.
+// Tuned for interview answers where candidates pause while thinking aloud.
 const START_WAIT_SECONDS = 0.8;
-const PATIENT_NO_PUNCTUATION_SECONDS = 2.2; // wait this long on a trailing pause
+const PATIENT_NO_PUNCTUATION_SECONDS = 2.2;
 const WEBHOOK_TIMEOUT_SECONDS = 20;
 
 export interface BuildAssistantEnv {
-  appUrl: string; // public webhook base URL (VAPI_WEBHOOK_URL or NEXT_PUBLIC_APP_URL)
-  webhookSecret: string; // VAPI_WEBHOOK_SECRET
-  webhookCredentialId?: string; // optional Vapi credential id for webhook auth
-  modelProvider: string; // VAPI_MODEL_PROVIDER
-  model: string; // VAPI_MODEL
-  transcriberProvider: string; // VAPI_TRANSCRIBER_PROVIDER (default "deepgram")
-  transcriberModel: string; // VAPI_TRANSCRIBER_MODEL (default "nova-3")
-  voiceEnv?: Record<string, string | undefined>; // for resolveVapiVoice (defaults to process.env)
+  appUrl: string;
+  webhookSecret: string;
+  webhookCredentialId?: string;
+  modelProvider: string;
+  model: string;
+  transcriberProvider: string;
+  transcriberModel: string;
+  voiceEnv?: Record<string, string | undefined>;
 }
 
 export function buildVapiAssistant(job: InterviewJob, env: BuildAssistantEnv): AssistantPayload {
@@ -99,7 +88,7 @@ export function buildVapiAssistant(job: InterviewJob, env: BuildAssistantEnv): A
         },
       };
   return {
-    // Vapi caps assistant name at 40 chars; `talkt-<cuid>` stays well under.
+    // Vapi caps assistant names at 40 characters.
     name: `talkt-${job.attemptId}`.slice(0, 40),
     firstMessage: firstMessage(job),
     firstMessageMode: "assistant-speaks-first",

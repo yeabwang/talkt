@@ -1,13 +1,5 @@
-// Push the curated TalkT interview templates into the DB.
-//
-// Run with: npm run db:seed  (after the migration is applied).
-// Idempotent: upserts by id so links stay stable across re-seeds.
-//
-// All templates are published under the "TalkT" name (authorName = null, which
-// the DTO renders as "TalkT") and made public so they appear in the directory.
-//
-// Loads .env.local first, then dynamically imports the Prisma client so
-// DATABASE_URL is set before the singleton initializes (same as db-check.ts).
+// Seed curated TalkT templates into the public directory.
+// Idempotent: upserts by id so template links stay stable across reseeds.
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
@@ -35,7 +27,7 @@ async function main() {
       dimensions: t.dimensions,
       questions: t.questions,
       voiceConfig: { voiceId: t.voice },
-      authorName: null, // null -> credited as "TalkT"
+      authorName: null,
       anonymous: false,
       publishedAt: now,
     };

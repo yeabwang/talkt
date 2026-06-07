@@ -1,10 +1,8 @@
-// Persona → Vapi voice resolution. Ported from the worker's TTS catalog. Keyed
-// by voice-agent key (adi/ren/kai/mira) with optional per-language overrides.
-// Override the whole catalog at deploy time with VAPI_VOICE_CATALOG (JSON).
+// Resolves TalkT personas to Vapi voices, with optional language overrides.
 import { z } from "zod";
 
 export interface VapiVoice {
-  provider: string; // "cartesia" | "11labs" | "inworld" | ...
+  provider: string;
   voiceId: string;
 }
 
@@ -21,7 +19,7 @@ const catalogSchema = z
 
 type VoiceCatalog = z.infer<typeof catalogSchema>;
 
-// Default catalog. Cartesia voice UUIDs carried over from the LiveKit config.
+// Default voice catalog.
 const DEFAULT_CATALOG: VoiceCatalog = {
   defaultPersona: DEFAULT_PERSONA,
   personas: {
@@ -58,9 +56,7 @@ function languageKeys(code: string): string[] {
   return norm === base ? [norm] : [norm, base];
 }
 
-/** Resolve a persona + language to a Vapi voice. Language override wins; then the
- * persona's default voice; then the catalog's default persona. Throws if nothing
- * matches (a misconfiguration we want loud, not silent). */
+/** Resolve a persona and language to a configured Vapi voice. */
 export function resolveVapiVoice(
   persona: string,
   languageCode: string,

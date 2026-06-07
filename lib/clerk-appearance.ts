@@ -1,5 +1,4 @@
-// Auth UI pulls every color from the TalkT design tokens in globals.css —
-// no hardcoded hex. Sharp 0-radius + Geist to match the design system.
+// Clerk auth styling mapped to the TalkT design tokens.
 export const authAppearance = {
   variables: {
     colorPrimary: "var(--primary)",
@@ -17,7 +16,7 @@ export const authAppearance = {
     socialButtonsVariant: "blockButton" as const,
   },
   elements: {
-    // Mirror the TalkT `.field` style (globals.css) but with a taller box.
+    // Match the TalkT field style with the taller auth input height.
     formFieldInput: {
       width: "100%",
       height: "48px",

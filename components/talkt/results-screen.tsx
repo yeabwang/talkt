@@ -7,7 +7,7 @@ import { DIMENSIONS, type Attempt, type Feedback, type FeedbackEvidence, type In
 import type { TalkTRoute } from "@/components/talkt/app-shell";
 import { Icon, ScoreBar, ScoreRing, SectionHeader, TalkTButton, scoreColorVar } from "@/components/talkt/primitives";
 
-// Score tier shown in place of a plain "ready" badge.
+// Score tier shown in the report header.
 function scoreAward(score: number): { label: string; color: string } {
   if (score >= 85) return { label: "Gold · outstanding", color: "var(--success)" };
   if (score >= 75) return { label: "Silver · strong", color: "var(--success)" };
@@ -15,7 +15,7 @@ function scoreAward(score: number): { label: string; color: string } {
   return { label: "Keep practicing", color: "var(--muted-foreground)" };
 }
 
-// Map the API's ready status payload to the UI Feedback shape.
+// Map the ready status payload to the UI Feedback shape.
 function toFeedback(status: AttemptStatus): Feedback {
   return {
     overall: status.overall ?? 0,
@@ -34,9 +34,7 @@ export function ResultsScreen({
   startInterview,
 }: {
   interview: Interview;
-  // Real DB attempt id. Grading is server-driven by the worker's session-ended
-  // callback, so the results screen polls this attempt's status whether it's a
-  // just-finished call or an older attempt opened from history.
+  // Real DB attempt id; results poll this until server-side grading completes.
   attemptId?: string;
   navigate: (route: TalkTRoute, params?: Record<string, unknown>) => void;
   startInterview: (interview: Interview) => void;
@@ -44,7 +42,7 @@ export function ResultsScreen({
   if (attemptId) {
     return <LiveResults interview={interview} attemptId={attemptId} navigate={navigate} startInterview={startInterview} />;
   }
-  // No attempt to show (stale/direct nav) — there is no mock report to render.
+  // Direct results URLs without an attempt id cannot render a report.
   return <ScoringFailed interview={interview} navigate={navigate} startInterview={startInterview} />;
 }
 
@@ -68,9 +66,7 @@ function LiveResults({
     let active = true;
     let timer: number | undefined;
     let attempts = 0;
-    // ~3 min ceiling (60 × 3s). The worker's session-ended callback + LLM analysis
-    // lands well within this; if it doesn't (e.g. the callback never reached us),
-    // stop polling and surface the failure instead of looping forever.
+    // Three-minute polling ceiling prevents an endless wait on missed callbacks.
     const MAX_ATTEMPTS = 60;
 
     const poll = async () => {
@@ -87,7 +83,7 @@ function LiveResults({
           return;
         }
       } catch {
-        /* transient — keep polling */
+        /* Transient polling failure; keep waiting. */
       }
       attempts += 1;
       if (attempts >= MAX_ATTEMPTS) {
@@ -109,7 +105,7 @@ function LiveResults({
   return <FeedbackReady interview={interview} attempt={null} feedback={feedback} navigate={navigate} startInterview={startInterview} />;
 }
 
-/** Fresh post-call state while the Vapi webhook and Trigger task finish. */
+/** Post-call state while the webhook and grading task finish. */
 function GradingScreen({ interview, status }: { interview: Interview; status: AttemptStatus["status"] }) {
   const analyzing = status === "analyzing";
   return (
@@ -127,7 +123,7 @@ function GradingScreen({ interview, status }: { interview: Interview; status: At
   );
 }
 
-/** Shared "couldn't score this attempt" terminal state. */
+/** Terminal state when an attempt cannot be scored. */
 function ScoringFailed({
   interview,
   navigate,

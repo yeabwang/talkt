@@ -1,6 +1,4 @@
-// GET /api/templates/recommended — the directory re-ordered for the signed-in
-// user: a recency-weighted content profile (from their attempt history) blended
-// with each template's directory rank. Cold start falls back to pure rank.
+// GET /api/templates/recommended: personalized ordering of the public directory.
 import { auth } from "@clerk/nextjs/server";
 
 import { unauthorized } from "@/lib/api";
@@ -18,10 +16,7 @@ export async function GET() {
   const { userId } = await auth();
   if (!userId) return unauthorized();
 
-  // Read-only path: no ensureUser() here. Syncing the Clerk profile row is a
-  // write-path concern (call/create/vote/publish); forcing it on this hot mount
-  // endpoint added a Clerk roundtrip + DB upsert before the reads could even
-  // start. A user with no row simply has no attempt facets yet (cold start).
+  // Read-only path: no profile upsert is needed for cold-start recommendations.
   const [attempts, interviews] = await Promise.all([listAttemptFacets(userId), listDirectory(userId)]);
   const profile = buildProfile(attempts);
 

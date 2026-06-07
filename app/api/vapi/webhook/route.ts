@@ -1,14 +1,4 @@
-// POST /api/vapi/webhook — Vapi's end-of-call-report callback.
-//
-// Vapi runs the voice pipeline and produces the authoritative transcript. This
-// endpoint maps the report to { attemptId, transcript, outcome }, then reuses the
-// server-driven grading decision (lib/session-ended.ts) — the single grade
-// trigger. It also deletes the ephemeral per-attempt assistant.
-//
-// Idempotent: grading collapses via the `grade-${attemptId}` key and the
-// in_progress guard, so a retry/double-fire is harmless. Auth mirrors the old
-// posture: with VAPI_WEBHOOK_SECRET set, either X-Vapi-Secret or
-// Authorization: Bearer must match; in production a missing secret fails closed.
+// POST /api/vapi/webhook: end-of-call callback, grading trigger, and assistant cleanup.
 import { tasks } from "@trigger.dev/sdk";
 import type { NextRequest } from "next/server";
 
@@ -62,14 +52,12 @@ export async function POST(req: NextRequest) {
 
   const message = (body as { message?: unknown })?.message;
   const type = (message as { type?: unknown } | undefined)?.type;
-  // We only subscribe to end-of-call-report; ack anything else so Vapi stops.
+  // Ack unhandled message types so Vapi does not retry them.
   if (type !== "end-of-call-report") return Response.json({ ok: true });
 
   const report = mapReport(message);
 
-  // Resolve the attempt by metadata first, then by assistant id (covers a
-  // missing metadata echo). processSessionEnded re-resolves by id internally, so
-  // pass the resolved id through.
+  // Prefer metadata; fall back to the ephemeral assistant id.
   let attemptId = report.attemptId;
   if (!attemptId && report.assistantId) {
     const a = await findAttemptForWebhook(null, report.assistantId);

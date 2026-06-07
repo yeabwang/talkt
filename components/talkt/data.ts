@@ -8,7 +8,6 @@ export interface AppUser {
   name: string;
   email: string;
   firstName?: string;
-  // Clerk profile image URL (img.clerk.com); falls back to initials if absent.
   image?: string;
 }
 
@@ -37,20 +36,14 @@ export interface Interview {
   role?: string;
   language?: string;
   focus?: string[];
-  // Core grading criteria the AI builder picked for a custom interview.
   dimensions?: { key: string; label: string }[];
 
-  // --- Directory / voting (populated when an interview comes from the API) ---
   upvotes?: number;
   downvotes?: number;
-  // The signed-in caller's current vote on this interview: 1 up, -1 down, 0 none.
   myVote?: -1 | 0 | 1;
-  // Public attribution; null/undefined when published anonymously (shown as "Community").
   authorName?: string | null;
   anonymous?: boolean;
-  // True when the signed-in caller owns this interview (controls the Publish action).
   mine?: boolean;
-  // True once the owner has published it to the public directory.
   published?: boolean;
 }
 
@@ -92,10 +85,9 @@ export interface Feedback {
   perQuestion: QuestionFeedback[];
 }
 
-// Languages a custom interview can be generated, conducted, and scored in.
+// Supported interview languages.
 export const LANGUAGES: string[] = ["English", "Spanish", "French", "German", "Portuguese", "Mandarin", "Hindi", "Arabic", "Japanese"];
 
-// The language an interview runs in; templates default to English.
 export function interviewLanguage(interview: Interview): string {
   return interview.language ?? "English";
 }
@@ -132,11 +124,10 @@ export interface UsageSummary {
   interviews: number;
   estCost: number;
   costBudget: number;
-  /* Minutes per session, oldest -> newest, for the over-time chart */
+  /** Minutes per session, oldest to newest. */
   trend: number[];
   breakdown: UsageBreakdownRow[];
 }
-
 export const USAGE: UsageSummary = {
   planLabel: "Free plan",
   minutes: 112,
@@ -155,5 +146,5 @@ export const USAGE: UsageSummary = {
   ],
 };
 
-// Real attempt history + feedback come from the DB once wired; no mock seed.
+// Runtime attempt history is loaded from the API.
 export const ATTEMPTS: Attempt[] = [];

@@ -1,6 +1,4 @@
-// Server-only seed source for the curated TalkT interview templates. These are
-// pushed into the DB by prisma/seed.ts and published under the "TalkT" name;
-// the app reads them dynamically from the API, not from this array.
+// Curated TalkT templates used by prisma/seed.ts.
 
 export interface SeedTemplate {
   id: string;
@@ -13,8 +11,7 @@ export interface SeedTemplate {
   minutes: number;
   voice: string;
   questions: string[];
-  // Role-specific grading criteria the grader scores against. 4 per role so the
-  // report reflects the actual job, not the generic communication/structure set.
+  // Role-specific scoring dimensions used by the grader.
   dimensions: { key: string; label: string }[];
 }
 

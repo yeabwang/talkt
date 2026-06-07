@@ -38,7 +38,7 @@ const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-// Map every route to the nav entry that should read as active.
+// Map each route to its active navigation item.
 const ACTIVE_NAV: Partial<Record<TalkTRoute, NavKey>> = {
   dashboard: "dashboard",
   results: "reports",

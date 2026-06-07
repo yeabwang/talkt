@@ -1,11 +1,5 @@
-// Durable grading task. The completed interview's transcript is graded here
-// (one DeepSeek call) instead of inline in the request, so the trigger returns
-// immediately. Triggered server-side from POST /api/vapi/webhook when the
-// end-of-call report classifies a `completed` outcome; the results screen polls
-// the attempt's status until grading lands.
-//
-// Steps are still published to run metadata (`step`) for any future Realtime
-// consumer, but the live results path is poll-based.
+// Durable grading task for completed interviews.
+// Results are written to the attempt row; the UI polls for readiness.
 import { AbortTaskRunError, logger, metadata, task } from "@trigger.dev/sdk";
 
 import { analyzeTranscript } from "@/lib/analysis";
@@ -17,10 +11,10 @@ export interface GradeAttemptPayload {
   transcript: { role: string; text: string }[];
 }
 
-/** The grading steps streamed to the UI, in order. */
+/** Grading step metadata, in order. */
 export type GradeStep = "received" | "scoring" | "saving" | "done";
 
-/** Flatten the captured turns into the text the analyzer scores. */
+/** Flatten captured turns for the analyzer. */
 function turnsToText(transcript: { role: string; text: string }[]): string {
   return transcript
     .map((t) => `${t.role === "user" ? "user" : "assistant"}: ${(t.text ?? "").trim()}`)
@@ -39,7 +33,7 @@ export const gradeAttempt = task({
     const attempt = await findAttemptForWebhook(attemptId, null);
     if (!attempt) throw new AbortTaskRunError(`Attempt ${attemptId} not found`);
 
-    // Idempotent: another trigger (webhook race / retry) already graded this.
+    // Idempotent retry: another trigger already completed grading.
     if (attempt.status === "ready") {
       metadata.set("step", "done" satisfies GradeStep);
       return { status: "ready" as const, alreadyGraded: true };
@@ -47,14 +41,12 @@ export const gradeAttempt = task({
 
     const text = turnsToText(transcript);
     if (!text) {
-      // Empty transcript (immediate hang-up) — nothing to score. Don't retry.
+      // Empty transcripts are terminal and should not retry.
       await markFailed(attemptId);
       throw new AbortTaskRunError("Transcript was empty");
     }
 
-    // No transcript blob: the raw transcript lives in this run's payload (Trigger
-    // replays it on retry), so we never persist it to our storage. The durable
-    // record is the structured Feedback + the raw-analysis blob.
+    // Transcript stays in the task payload; persisted output is structured feedback.
     await markAnalyzing(attemptId);
 
     metadata.set("step", "scoring" satisfies GradeStep);

@@ -1,12 +1,7 @@
-// Voice-agent personas: the pool of interviewer personas surfaced in the UI.
-// The persona's actual Vapi TTS voice is resolved in code from a per-language
-// catalog (lib/vapi/voices.ts), so there is no availability to poll and no voice
-// id stored here. resolveVoiceAgent() is a pure persona lookup (key/name/tone)
-// with the unknown-key fallback preserved.
+// Voice-agent personas surfaced in the UI; Vapi voice ids resolve in lib/vapi/voices.ts.
 import { prisma } from "@/lib/prisma";
 
-// Seed personas surfaced in the UI (components/talkt/data.ts VOICES). Selection
-// is by key; the spoken voice is resolved worker-side (agent/src/model-config.ts).
+// Seed personas mirrored by components/talkt/data.ts VOICES.
 const DEFAULT_AGENTS = [
   { key: "adi", name: "Adi", tone: "Calm, measured", language: "en" },
   { key: "ren", name: "Ren", tone: "Warm, direct", language: "en" },
@@ -26,9 +21,7 @@ export async function ensureVoiceAgents(): Promise<void> {
 }
 
 /**
- * Resolve a persona key to its display identity. Falls back to the first seeded
- * persona when the key is unknown, and to a hard-coded default if the table seed
- * never ran, so the start path never throws.
+ * Resolve a persona key to its display identity with a safe fallback.
  */
 export async function resolveVoiceAgent(key: string): Promise<ResolvedVoice> {
   await ensureVoiceAgents();

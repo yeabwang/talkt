@@ -218,7 +218,7 @@ function Sparkline({ data, width = 72, height = 26 }: { data: number[]; width?: 
   const max = Math.max(...data);
   const range = max - min || 1;
   const points = data.map((value, index) => {
-    // Single-point data has no span; pin x to the right edge instead of dividing by zero (NaN).
+    // Avoid division by zero for single-point trends.
     const x = data.length > 1 ? (index / (data.length - 1)) * width : width;
     const y = height - ((value - min) / range) * (height - 4) - 2;
     return [x, y] as const;

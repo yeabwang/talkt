@@ -1,14 +1,11 @@
-// Pure logic for the Vapi end-of-call-report webhook. Kept free of Prisma / the
-// Trigger SDK / network so it is unit-testable; the route wires the real deps.
+// Pure parsing and verification helpers for Vapi end-of-call reports.
 import { timingSafeEqual } from "node:crypto";
 
 import { sanitizeTranscript, type Turn } from "@/lib/transcript";
 
 export type Outcome = "completed" | "abandoned";
 
-// Reasons that mean setup/pipeline failed before a real interview happened.
-// Everything else with answers is graded, except a plain customer hangup before
-// the assistant's closing turn.
+// Setup and pipeline failures are treated as abandoned attempts.
 const ABANDON_REASONS = new Set<string>([
   "customer-did-not-answer",
   "customer-did-not-give-microphone-permission",
@@ -31,9 +28,7 @@ function bearerToken(authorization: string | null): string | null {
   return scheme?.toLowerCase() === "bearer" && token ? token : null;
 }
 
-/** Constant-time compare of the legacy X-Vapi-Secret header against our shared
- * secret. Mirrors the worker-callback posture: with a secret set, the header
- * must match (else reject); without one, allow in dev only. */
+/** Verify the legacy X-Vapi-Secret header. Allows missing secrets only outside production. */
 export function verifyVapiSecret(provided: string | null, secret: string | undefined, isProd: boolean): "ok" | 401 | 503 {
   if (secret) {
     return safeSecretMatch(provided, secret) ? "ok" : 401;
@@ -55,7 +50,7 @@ export function verifyVapiRequest(
 interface ReportMessage {
   role?: unknown;
   content?: unknown;
-  message?: unknown; // some payloads use `message` instead of `content`
+  message?: unknown;
   transcript?: unknown;
 }
 
@@ -72,7 +67,7 @@ function turnsFromMessages(messages: unknown): Turn[] {
     .map((m): { role: string; text: string } | null => {
       const rec = m as ReportMessage;
       const role = rec.role === "user" ? "user" : rec.role === "assistant" || rec.role === "bot" ? "assistant" : null;
-      if (!role) return null; // drop system / tool / function rows
+      if (!role) return null;
       const text = textFrom(rec.content) || textFrom(rec.message) || textFrom(rec.transcript);
       return { role, text };
     })
@@ -106,8 +101,7 @@ function assistantClosed(transcript: Turn[]): boolean {
   return /\b(that'?s (everything|the interview complete)|interview is complete|feedback'?s being|feedback is being|report'?s being|report is being|being prepared|prepared now|you'?ll see it in a moment)\b/.test(lastAssistant);
 }
 
-/** Classify the call. Abandoned when there is no candidate speech, or the end
- * reason is an early customer hangup / setup failure. Completed otherwise. */
+/** Classify whether a call produced a scoreable interview. */
 export function classifyOutcome(transcript: Turn[], endedReason: string | undefined): Outcome {
   const userTurns = transcript.filter((t) => t.role === "user").length;
   if (userTurns === 0) return "abandoned";
@@ -116,8 +110,7 @@ export function classifyOutcome(transcript: Turn[], endedReason: string | undefi
   return "completed";
 }
 
-/** Map a Vapi `end-of-call-report` message object to attempt id + transcript +
- * outcome. `msg` is `body.message`. */
+/** Map a Vapi end-of-call report to the internal attempt outcome. */
 export function mapReport(msg: unknown): ParsedReport {
   const m = (msg ?? {}) as Record<string, unknown>;
   const assistant = (m.assistant ?? {}) as Record<string, unknown>;
@@ -143,9 +136,7 @@ export function mapReport(msg: unknown): ParsedReport {
   return { attemptId, assistantId, transcript, outcome: classifyOutcome(transcript, endedReason) };
 }
 
-/** Map a completed Vapi `/call` record into the same shape as an
- * end-of-call-report. This repairs local development runs where the assistant
- * server URL points at localhost and Vapi cannot deliver the webhook. */
+/** Map a Vapi call record into the same shape as webhook reports. */
 export function mapCallRecord(call: unknown, attemptId: string | null): ParsedReport | null {
   const c = (call ?? {}) as Record<string, unknown>;
   const status = typeof c.status === "string" ? c.status : undefined;

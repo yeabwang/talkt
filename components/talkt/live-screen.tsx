@@ -7,15 +7,14 @@ import { type AppUser, type Interview } from "@/components/talkt/data";
 import { transcriptBlocks, useVapiCall } from "@/components/talkt/use-vapi-call";
 import { AgentAvatar, Avatar, Icon, Waveform, Wordmark } from "@/components/talkt/primitives";
 
-// Words too generic to identify which question is being asked. English-only, but
-// harmless for other languages (they just keep more tokens).
+// English stopwords used only for question-progress matching.
 const QUESTION_STOPWORDS = new Set([
   "the", "and", "for", "you", "your", "what", "how", "why", "can", "could", "would", "tell", "about",
   "give", "with", "that", "this", "please", "describe", "explain", "walk", "through", "have", "are",
   "did", "does", "any", "his", "her", "their", "from", "into", "when", "where", "who", "which",
 ]);
 
-// Significant tokens of a line, across scripts (keeps accents/non-latin).
+// Significant tokens across scripts.
 function sigWords(text: string): string[] {
   return text
     .toLowerCase()
@@ -24,10 +23,7 @@ function sigWords(text: string): string[] {
     .filter((w) => w.length > 2 && !QUESTION_STOPWORDS.has(w));
 }
 
-// How many core questions the interviewer has reached, in order. Advances only
-// when an assistant turn carries enough of the next question's keywords — so
-// follow-ups and acknowledgements don't push the bar, but moving to the next
-// question does. Paraphrase may delay a step (under-counts, never over-counts).
+// Estimate how many core questions the interviewer has reached, in order.
 function countQuestionsReached(assistantTexts: string[], questions: string[]): number {
   if (!questions.length) return 0;
   const qWords = questions.map(sigWords);
@@ -58,8 +54,7 @@ export function LiveInterviewScreen({
   user: AppUser;
   session: CallSession;
   camStream: MediaStream | null;
-  // Grading is server-driven now (the worker owns the transcript), so end only
-  // carries the attempt id — the results screen polls its status.
+  // Results polling only needs the attempt id.
   onEnd: (attemptId: string) => void;
   onCancel: () => void;
 }) {
@@ -69,11 +64,10 @@ export function LiveInterviewScreen({
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const startedRef = React.useRef(false);
 
-  // Total core questions, for the question-driven progress bar.
+  // Total core questions for the progress bar.
   const totalQuestions = interview.questions?.length || interview.count || 1;
 
-  // Kick off the call once (StrictMode double-invoke guard). Starts the Vapi web
-  // call with the ephemeral assistant id minted server-side.
+  // Start the Vapi call once, even under StrictMode remount checks.
   const startCall = call.start;
   React.useEffect(() => {
     if (startedRef.current) return;
@@ -81,7 +75,7 @@ export function LiveInterviewScreen({
     void startCall(session.assistantId, session.publicKey);
   }, [startCall, session.assistantId, session.publicKey]);
 
-  // Attach + tear down the local self-view stream owned by this screen.
+  // Attach and release the local self-view stream.
   React.useEffect(() => {
     if (camStream && videoRef.current) videoRef.current.srcObject = camStream;
     return () => {
@@ -89,33 +83,29 @@ export function LiveInterviewScreen({
     };
   }, [camStream]);
 
-  // Elapsed clock runs while the call is active.
+  // Elapsed clock runs only during an active call.
   React.useEffect(() => {
     if (call.status !== "active") return;
     const timer = window.setInterval(() => setElapsed((v) => v + 1), 1000);
     return () => window.clearInterval(timer);
   }, [call.status]);
 
-  // Closing countdown shown before handoff (null until the call ends naturally).
+  // Closing countdown before results handoff.
   const [countdown, setCountdown] = React.useState<number | null>(null);
 
-  // Decide the closing path once the line drops, then drive it with a timer.
+  // Route once after the call drops.
   const endedHandledRef = React.useRef(false);
   React.useEffect(() => {
     if (call.status !== "ended" || endedHandledRef.current) return;
     endedHandledRef.current = true;
 
     if (call.endedManually) {
-      // Candidate hung up mid-interview. The worker classifies this as abandoned
-      // server-side (no end_interview before disconnect), so we just bounce to the
-      // dashboard after a brief beat — no client abandon call.
+      // Candidate ended early; the server classifies and stores the final status.
       const timer = window.setTimeout(onCancel, 1500);
       return () => window.clearTimeout(timer);
     }
 
-    // Natural (end_interview) or time-cap completion — a short visible countdown
-    // (3..2..1) instead of an abrupt cut, then route to results (which polls the
-    // server-graded status; the worker already owns the transcript).
+    // Natural completion gets a short visible handoff before result polling.
     let remaining = 3;
     const tick = window.setInterval(() => {
       remaining -= 1;
@@ -131,14 +121,10 @@ export function LiveInterviewScreen({
   const aiSpeaking = call.assistantSpeaking;
   const youSpeaking = call.userSpeaking && !call.muted;
 
-  // Turn-by-turn view, including the current in-flight transcript from either
-  // speaker so the drawer mirrors what the candidate hears in real time.
+  // Turn-by-turn transcript shown in the drawer.
   const conversation = React.useMemo(() => transcriptBlocks(call.turns), [call.turns]);
 
-  // Progress tracks how far through the question set the interviewer has gotten,
-  // not elapsed time (interviews finish well before the cap). Advances when the
-  // interviewer reaches the next core question — not on every user turn, which
-  // over-counted follow-ups and filled the bar on question one.
+  // Progress follows reached questions rather than elapsed time.
   const reached = React.useMemo(
     () => countQuestionsReached(conversation.filter((b) => b.role === "assistant").map((b) => b.text), interview.questions ?? []),
     [conversation, interview.questions],
@@ -215,14 +201,12 @@ export function LiveInterviewScreen({
         </div>
       </div>
 
-      {/* Question-driven progress (see `progress`). */}
+      {/* Question-driven progress. */}
       <div style={{ height: 2, background: "var(--border)" }}>
         <div style={{ height: "100%", width: `${progress}%`, background: "var(--foreground)", transition: "width var(--dur-base) var(--ease-out)" }} />
       </div>
 
-      {/* Vapi takes a few seconds to warm the pipeline after connect; show a
-          gentle status until the interviewer's first word so the candidate
-          knows the call is working and isn't sitting in unexplained silence. */}
+      {/* Show status until the first interviewer output arrives. */}
       {!call.interviewerStarted && (call.status === "connecting" || call.status === "active") ? (
         <div
           className="fade-in flex items-center justify-center gap-2"

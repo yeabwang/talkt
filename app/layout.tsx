@@ -19,7 +19,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      // Dark is the default theme; light is the toggle (next-themes later).
+      // Default to dark while allowing the client theme to take over after hydration.
       className={`${GeistSans.variable} ${GeistMono.variable} dark h-full antialiased`}
       suppressHydrationWarning
     >

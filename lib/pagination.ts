@@ -1,19 +1,15 @@
-// Pure, framework-free cursor pagination over an already-ordered, in-memory list.
-// Used by the directory read: the cached directory rows are a bounded, rank-ordered
-// set, so we page through them by id cursor rather than issuing per-page DB reads.
-// Cursor pagination (not offset) is stable under insertion and cheap to slice.
+// Cursor pagination over a bounded, already-ordered in-memory list.
 
-/** Hard ceiling on page size — aligns with DIRECTORY_MAX_ROWS so one page can
- *  carry the whole bounded directory (preserves the client's instant filtering). */
+/** Hard ceiling on page size. */
 export const MAX_PAGE_SIZE = 200;
 
 export interface Page<T> {
   items: T[];
-  /** id of the last item when more rows remain, else null (terminal page). */
+  /** Last item id when more rows remain. */
   nextCursor: string | null;
 }
 
-/** Parse + clamp a requested page size to (0, MAX_PAGE_SIZE]; fall back when invalid. */
+/** Parse and clamp a requested page size. */
 export function clampLimit(raw: unknown, fallback: number = MAX_PAGE_SIZE): number {
   const n =
     typeof raw === "string" ? Number.parseInt(raw, 10) : typeof raw === "number" ? raw : Number.NaN;

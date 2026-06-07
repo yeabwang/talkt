@@ -1,6 +1,4 @@
-// Vote repository: one up/down vote per user per interview, with atomic tally
-// recompute, rank update, and auto-flag — all in a single transaction so the
-// denormalized counts can never drift from the Vote rows.
+// Vote repository with atomic tally recompute, rank update, and auto-flagging.
 import { revalidateDirectory } from "@/lib/db/directory-cache";
 import { prisma } from "@/lib/prisma";
 import { rankScore, shouldFlag } from "@/lib/ranking";
@@ -10,10 +8,7 @@ export type CastVoteResult =
   | { ok: false; reason: "not_found" | "forbidden" | "not_votable" };
 
 /**
- * Cast (1 / -1) or clear (0) the caller's vote on an interview. Rejects
- * self-voting and votes on non-public/flagged interviews. Recomputes tallies
- * from the authoritative Vote rows, refreshes rankScore, and auto-flags when
- * downvotes dominate (see lib/ranking shouldFlag).
+ * Cast, flip, or clear the caller's vote on a public interview.
  */
 export async function castVote(userId: string, interviewId: string, value: -1 | 0 | 1): Promise<CastVoteResult> {
   const result = await prisma.$transaction(async (tx): Promise<CastVoteResult> => {
@@ -22,7 +17,7 @@ export async function castVote(userId: string, interviewId: string, value: -1 | 
       select: { ownerId: true, anonymous: true, flagged: true, visibility: true },
     });
     if (!interview) return { ok: false, reason: "not_found" };
-    if (interview.ownerId === userId) return { ok: false, reason: "forbidden" }; // no self-voting
+    if (interview.ownerId === userId) return { ok: false, reason: "forbidden" };
     if (interview.visibility !== "public" || interview.flagged) return { ok: false, reason: "not_votable" };
 
     if (value === 0) {

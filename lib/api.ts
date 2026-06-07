@@ -1,7 +1,4 @@
-// Shared HTTP response helpers. Every route handler returns one consistent JSON
-// error shape — { error: string } — so auth, validation, and not-found failures
-// look identical across the API instead of drifting between plain text and JSON
-// per route. The client's asError() reads { error } and falls back gracefully.
+// Shared API response helpers with a consistent { error } body.
 
 export function jsonError(message: string, status: number, headers?: HeadersInit): Response {
   return Response.json({ error: message }, headers ? { status, headers } : { status });

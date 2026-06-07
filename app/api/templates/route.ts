@@ -1,9 +1,4 @@
-// GET /api/templates — the public, ranked template directory. Auth is optional;
-// when signed in, each interview carries the caller's own vote (myVote).
-//
-// Cursor-paginated: `?limit=<n>&cursor=<id>`. The default limit returns the whole
-// bounded directory in one response (the client filters/searches client-side), so
-// the common path is unchanged; pass limit/cursor to page a large catalog.
+// GET /api/templates: public ranked directory with optional per-caller vote data.
 import { auth } from "@clerk/nextjs/server";
 
 import { listDirectoryPage } from "@/lib/db/interviews";

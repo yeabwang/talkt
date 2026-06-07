@@ -266,8 +266,7 @@ function TemplateCard({ interview, onOpen, onStart }: { interview: Interview; on
   );
 }
 
-// Small author attribution shown on cards and the detail page. Anonymous
-// publications read as "Community"; curated templates as "TalkT".
+// Author attribution shown on cards and detail pages.
 function AuthorCredit({ interview }: { interview: Interview }) {
   const label = interview.anonymous ? "Community" : interview.author;
   if (!label) return null;

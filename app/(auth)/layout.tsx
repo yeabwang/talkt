@@ -2,8 +2,7 @@ import Link from "next/link";
 
 import { Wordmark } from "@/components/talkt/primitives";
 
-// Brand split shell shared by /sign-in and /sign-up. The Clerk component is
-// rendered as {children} in the right pane. All colors come from CSS tokens.
+// Shared brand shell for Clerk sign-in and sign-up screens.
 export default function AuthLayout({
   children,
 }: {

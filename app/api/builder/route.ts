@@ -5,11 +5,10 @@ import { badRequest, jsonError, tooManyRequests, unauthorized } from "@/lib/api"
 import { chatJSON, type ChatMessage } from "@/lib/llm";
 import { createRateLimiter } from "@/lib/rate-limit";
 
-// 20 builder turns/minute/user — generous for a conversation, caps LLM cost abuse.
+// Cost guard for builder LLM turns.
 const builderLimiter = createRateLimiter({ limit: 20, windowMs: 60_000 });
 
-// One builder turn. Always present so the client can bind every field; the
-// `ready`/`questions`/`dimensions` payload fills in only on the final turn.
+// One normalized builder response.
 export interface BuilderSummary {
   title: string;
   role: string;
@@ -101,7 +100,7 @@ export async function POST(req: NextRequest) {
       .map<ChatMessage>((m) => ({ role: m.from === "you" ? "user" : "assistant", content: m.text })),
   ];
 
-  // Seed the very first turn so the model opens the conversation.
+  // Seed the first turn so the model opens the conversation.
   if (history.length === 0) {
     messages.push({ role: "user", content: "(The user just opened the builder. Greet them and ask your first question.)" });
   }
@@ -115,8 +114,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Coerce the model output into a guaranteed-shaped turn so the client never
-// has to defend against missing fields.
+// Coerce model output into the shape expected by the client.
 function normalizeTurn(raw: Partial<BuilderTurn>): BuilderTurn {
   const summaryIn = (raw.summary ?? {}) as Partial<BuilderSummary>;
   const questions = strList(raw.questions);
@@ -132,8 +130,7 @@ function normalizeTurn(raw: Partial<BuilderTurn>): BuilderTurn {
     .slice(0, 6);
   if (ready && dimensions.length < 4) dimensions = DEFAULT_DIMENSIONS;
 
-  // Enforce the 1.5-2 min/question budget on the final set, regardless of what
-  // the model guessed (estimates used to run wildly long vs. real call length).
+  // Enforce the final 1.5-2 minute budget per question.
   let minutes = clampNum(summaryIn.minutes, 0, 120);
   if (ready) {
     const lo = Math.ceil(questions.length * 1.5);

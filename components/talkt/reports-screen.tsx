@@ -7,7 +7,7 @@ import { Icon, SectionHeader, TalkTButton, categoryIcon, scoreColorVar } from "@
 import { ReportsListSkeleton } from "@/components/talkt/skeletons";
 import type { TalkTRoute } from "@/components/talkt/app-shell";
 
-// Every interview a user has run, as openable feedback reports.
+// Graded interview history with openable feedback reports.
 export function ReportsScreen({
   navigate,
   startInterview,

@@ -5,7 +5,7 @@ import * as React from "react";
 import type { AppUser } from "@/components/talkt/data";
 import { SectionHeader, TalkTButton } from "@/components/talkt/primitives";
 
-// Profile and account.
+// Profile and account settings.
 export function SettingsScreen({
   user,
   onSignOut,

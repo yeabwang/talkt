@@ -2,8 +2,7 @@
 
 import * as React from "react";
 
-// Shimmer blocks sized to the real cards so the layout doesn't shift when data
-// arrives. Pure presentation; driven by callers' load status.
+// Shimmer blocks sized to the real layouts to avoid loading shifts.
 
 function Shimmer({ style }: { style?: React.CSSProperties }) {
   return <div className="talkt-skeleton" style={{ borderRadius: 8, background: "var(--surface-2)", ...style }} aria-hidden />;
@@ -37,9 +36,7 @@ export function HeroSkeleton() {
 }
 
 /**
- * Full-page placeholder shown while an already-graded report's stored feedback
- * loads — the same calm shimmer the dashboard uses, not the live grading-steps
- * screen (which is only for a fresh interview being scored).
+ * Full-page placeholder for loading an existing report.
  */
 export function ReportSkeleton() {
   return (

@@ -1,6 +1,4 @@
-// ISO 639-1 <-> display-label mapping for the languages a TalkT interview can
-// run in. The DB stores ISO codes (Interview.language); the UI works in labels
-// (see components/talkt/data.ts LANGUAGES). Convert at the boundary.
+// Converts between stored ISO language codes and UI display labels.
 
 const LABEL_BY_CODE: Record<string, string> = {
   en: "English",
