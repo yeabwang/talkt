@@ -4,6 +4,9 @@
 // compact surface `live-screen.tsx` consumes. The browser starts the call with
 // the ephemeral assistant id minted server-side (the prompt/questions never reach
 // here). Vapi runs STT/LLM/TTS; we mirror transcript + speaking state for the UI.
+// Assistant turns prefer `assistant.speechStarted` full-text events, buffered
+// until speech-end, so the transcript drawer shows complete interviewer turns
+// instead of fragile partial speech transcripts.
 //
 // `@vapi-ai/web` is imported lazily on start() so it never runs during SSR.
 import * as React from "react";
@@ -47,6 +50,12 @@ export function mergeTurn(
   }
 
   const last = turns[turns.length - 1];
+  if (incoming.segmentId && last && last.role === role && !last.segmentId && relatedText(last.text, incoming.text)) {
+    const next = [...turns];
+    next[next.length - 1] = incoming;
+    return next;
+  }
+
   if (last && last.role === role && !last.final && !last.segmentId) {
     if (sameTurn(last, incoming)) return turns;
     const next = [...turns];
@@ -59,6 +68,12 @@ export function mergeTurn(
 
 function sameTurn(a: TranscriptTurn, b: TranscriptTurn): boolean {
   return a.role === b.role && a.text === b.text && a.final === b.final && a.segmentId === b.segmentId;
+}
+
+function relatedText(a: string, b: string): boolean {
+  const left = a.trim().toLowerCase();
+  const right = b.trim().toLowerCase();
+  return left.length > 0 && right.length > 0 && (left.includes(right) || right.includes(left));
 }
 
 export function transcriptBlocks(turns: TranscriptTurn[]): TranscriptBlock[] {
@@ -94,6 +109,22 @@ export function transcriptFromMessage(
   const text = typeof m.transcript === "string" ? m.transcript : "";
   const final = m.transcriptType === "final";
   return { role, text, final };
+}
+
+export function assistantSpeechFromMessage(
+  msg: unknown,
+): { role: "assistant"; text: string; final: true; segmentId: string } | null {
+  const m = (msg ?? {}) as { type?: unknown; text?: unknown; turn?: unknown; timestamp?: unknown };
+  if (m.type !== "assistant.speechStarted") return null;
+  const text = typeof m.text === "string" ? m.text.trim() : "";
+  if (!text) return null;
+  const id =
+    typeof m.turn === "number"
+      ? `assistant-speech-${m.turn}`
+      : typeof m.timestamp === "number"
+        ? `assistant-speech-${m.timestamp}`
+        : `assistant-speech-${text.slice(0, 48)}`;
+  return { role: "assistant", text, final: true, segmentId: id };
 }
 
 // ── Hook ───────────────────────────────────────────────────────────────────
@@ -142,10 +173,13 @@ export function useVapiCall(): UseVapiCall {
   const connectedRef = React.useRef(false);
   const interviewerStartedRef = React.useRef(false);
   const userSpeakingTimer = React.useRef<number | null>(null);
+  const assistantSpeechBuffer = React.useRef<Map<string, { text: string; segmentId: string }>>(new Map());
+  const assistantSpeechSeenRef = React.useRef(false);
 
   const cleanup = React.useCallback(() => {
     if (userSpeakingTimer.current) window.clearTimeout(userSpeakingTimer.current);
     userSpeakingTimer.current = null;
+    assistantSpeechBuffer.current.clear();
     const v = vapiRef.current;
     if (v) {
       try {
@@ -160,8 +194,15 @@ export function useVapiCall(): UseVapiCall {
 
   React.useEffect(() => cleanup, [cleanup]);
 
-  const pushTranscript = React.useCallback((role: "assistant" | "user", text: string, final: boolean) => {
-    setTurns((prev) => mergeTurn(prev, role, text, final));
+  const pushTranscript = React.useCallback((role: "assistant" | "user", text: string, final: boolean, segmentId?: string) => {
+    setTurns((prev) => mergeTurn(prev, role, text, final, segmentId));
+  }, []);
+
+  const flushAssistantSpeech = React.useCallback(() => {
+    const buffered = Array.from(assistantSpeechBuffer.current.values());
+    if (!buffered.length) return;
+    assistantSpeechBuffer.current.clear();
+    setTurns((prev) => buffered.reduce((next, item) => mergeTurn(next, "assistant", item.text, true, item.segmentId), prev));
   }, []);
 
   // The interviewer has "started" the moment it produces any output — speech or
@@ -183,6 +224,8 @@ export function useVapiCall(): UseVapiCall {
       setError(null);
       setTurns([]);
       connectedRef.current = false;
+      assistantSpeechSeenRef.current = false;
+      assistantSpeechBuffer.current.clear();
       setAssistantSpeaking(false);
       setUserSpeaking(false);
       setVolume(0);
@@ -202,6 +245,7 @@ export function useVapiCall(): UseVapiCall {
         });
 
         vapi.on("call-end", () => {
+          flushAssistantSpeech();
           setAssistantSpeaking(false);
           setUserSpeaking(false);
           setVolume(0);
@@ -212,7 +256,10 @@ export function useVapiCall(): UseVapiCall {
           markInterviewerStarted();
           setAssistantSpeaking(true);
         });
-        vapi.on("speech-end", () => setAssistantSpeaking(false));
+        vapi.on("speech-end", () => {
+          setAssistantSpeaking(false);
+          flushAssistantSpeech();
+        });
 
         vapi.on("volume-level", (...args: unknown[]) => {
           const level = typeof args[0] === "number" ? args[0] : 0;
@@ -220,9 +267,18 @@ export function useVapiCall(): UseVapiCall {
         });
 
         vapi.on("message", (...args: unknown[]) => {
+          const speech = assistantSpeechFromMessage(args[0]);
+          if (speech) {
+            assistantSpeechSeenRef.current = true;
+            markInterviewerStarted();
+            assistantSpeechBuffer.current.set(speech.segmentId, { text: speech.text, segmentId: speech.segmentId });
+            return;
+          }
+
           const t = transcriptFromMessage(args[0]);
           if (!t || !t.text.trim()) return;
           if (t.role === "assistant") markInterviewerStarted();
+          if (t.role === "assistant" && assistantSpeechSeenRef.current) return;
           pushTranscript(t.role, t.text, t.final);
           if (t.role === "user") {
             // Drive the candidate tile's speaking flag off transcript activity.
@@ -246,7 +302,7 @@ export function useVapiCall(): UseVapiCall {
         cleanup();
       }
     },
-    [cleanup, pushTranscript, markInterviewerStarted],
+    [cleanup, pushTranscript, markInterviewerStarted, flushAssistantSpeech],
   );
 
   const stop = React.useCallback((manual = false) => {

@@ -1,6 +1,6 @@
 // Pure builder: InterviewJob -> Vapi assistant create payload. No SDK/network
 // import so it is unit-testable. The model + transcriber are Vapi-native (billed
-// by Vapi, no provider key); the webhook URL + secret and the model/transcriber
+// by Vapi, no provider key); the webhook URL/auth and the model/transcriber
 // selection come from env; everything else is derived from the job.
 import type { InterviewJob } from "@/lib/vapi/job";
 import { firstMessage, systemPrompt } from "@/lib/vapi/prompt";
@@ -15,7 +15,9 @@ export interface AssistantPayload {
   name: string;
   firstMessage: string;
   firstMessageMode: "assistant-speaks-first";
+  firstMessageInterruptionsEnabled: false;
   maxDurationSeconds: number;
+  clientMessages: ["transcript", "speech-update", "status-update", "assistant.speechStarted"];
   model: {
     provider: string; // e.g. "google" | "openai"
     model: string; // e.g. "gemini-2.5-flash"
@@ -23,6 +25,7 @@ export interface AssistantPayload {
     messages: { role: "system"; content: string }[];
     tools: { type: "endCall" }[];
   };
+  modelOutputInMessagesEnabled: true;
   voice: { provider: string; voiceId: string };
   transcriber: { provider: string; model: string; language: string };
   // Turn-taking patience. Keeps the interviewer from cutting in when the
@@ -36,8 +39,21 @@ export interface AssistantPayload {
         waitSeconds: number;
         transcriptionEndpointingPlan: { onPunctuationSeconds: number; onNoPunctuationSeconds: number; onNumberSeconds: number };
       };
-  server: { url: string; secret: string };
+  stopSpeakingPlan: {
+    numWords: number;
+    voiceSeconds: number;
+    backoffSeconds: number;
+    acknowledgementPhrases: string[];
+    interruptionPhrases: string[];
+  };
+  server: {
+    url: string;
+    timeoutSeconds: number;
+    credentialId?: string;
+    headers?: { "X-Vapi-Secret": string };
+  };
   serverMessages: ["end-of-call-report"];
+  endCallPhrases: string[];
   metadata: { attemptId: string };
 }
 
@@ -45,12 +61,14 @@ export interface AssistantPayload {
 // more patient. Tuned for "thinking out loud" interview cadence.
 const START_WAIT_SECONDS = 0.8;
 const PATIENT_NO_PUNCTUATION_SECONDS = 2.2; // wait this long on a trailing pause
+const WEBHOOK_TIMEOUT_SECONDS = 20;
 
 export interface BuildAssistantEnv {
   appUrl: string; // NEXT_PUBLIC_APP_URL
   webhookSecret: string; // VAPI_WEBHOOK_SECRET
-  modelProvider: string; // VAPI_MODEL_PROVIDER (default "google")
-  model: string; // VAPI_MODEL (default "gemini-2.5-flash")
+  webhookCredentialId?: string; // optional Vapi credential id for webhook auth
+  modelProvider: string; // VAPI_MODEL_PROVIDER
+  model: string; // VAPI_MODEL
   transcriberProvider: string; // VAPI_TRANSCRIBER_PROVIDER (default "deepgram")
   transcriberModel: string; // VAPI_TRANSCRIBER_MODEL (default "nova-3")
   voiceEnv?: Record<string, string | undefined>; // for resolveVapiVoice (defaults to process.env)
@@ -59,6 +77,17 @@ export interface BuildAssistantEnv {
 export function buildVapiAssistant(job: InterviewJob, env: BuildAssistantEnv): AssistantPayload {
   const voice = resolveVapiVoice(job.persona, job.languageCode, env.voiceEnv);
   const isEnglish = job.languageCode.trim().toLowerCase().startsWith("en");
+  const server = env.webhookCredentialId
+    ? {
+        url: `${env.appUrl.replace(/\/$/, "")}/api/vapi/webhook`,
+        timeoutSeconds: WEBHOOK_TIMEOUT_SECONDS,
+        credentialId: env.webhookCredentialId,
+      }
+    : {
+        url: `${env.appUrl.replace(/\/$/, "")}/api/vapi/webhook`,
+        timeoutSeconds: WEBHOOK_TIMEOUT_SECONDS,
+        headers: { "X-Vapi-Secret": env.webhookSecret },
+      };
   const startSpeakingPlan: AssistantPayload["startSpeakingPlan"] = isEnglish
     ? { waitSeconds: START_WAIT_SECONDS, smartEndpointingPlan: { provider: "livekit" } }
     : {
@@ -74,7 +103,9 @@ export function buildVapiAssistant(job: InterviewJob, env: BuildAssistantEnv): A
     name: `talkt-${job.attemptId}`.slice(0, 40),
     firstMessage: firstMessage(job),
     firstMessageMode: "assistant-speaks-first",
+    firstMessageInterruptionsEnabled: false,
     maxDurationSeconds: job.maxDurationSeconds,
+    clientMessages: ["transcript", "speech-update", "status-update", "assistant.speechStarted"],
     model: {
       provider: env.modelProvider,
       model: env.model,
@@ -82,11 +113,20 @@ export function buildVapiAssistant(job: InterviewJob, env: BuildAssistantEnv): A
       messages: [{ role: "system", content: systemPrompt(job) }],
       tools: [{ type: "endCall" }],
     },
+    modelOutputInMessagesEnabled: true,
     voice,
     transcriber: { provider: env.transcriberProvider, model: env.transcriberModel, language: job.languageCode },
     startSpeakingPlan,
-    server: { url: `${env.appUrl.replace(/\/$/, "")}/api/vapi/webhook`, secret: env.webhookSecret },
+    stopSpeakingPlan: {
+      numWords: 1,
+      voiceSeconds: 0.25,
+      backoffSeconds: 1,
+      acknowledgementPhrases: ["okay", "yeah", "right", "mm-hmm", "uh-huh", "got it", "thanks"],
+      interruptionPhrases: ["stop", "pause", "wait", "actually", "no", "hold on"],
+    },
+    server,
     serverMessages: ["end-of-call-report"],
+    endCallPhrases: ["Take care."],
     metadata: { attemptId: job.attemptId },
   };
 }

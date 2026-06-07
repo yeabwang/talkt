@@ -6,10 +6,10 @@ import { sanitizeTranscript, type Turn } from "@/lib/transcript";
 
 export type Outcome = "completed" | "abandoned";
 
-// Reasons that mean the candidate (or a setup failure) ended the call before a
-// real interview happened — never scored. Everything else with answers is graded.
+// Reasons that mean setup/pipeline failed before a real interview happened.
+// Everything else with answers is graded, except a plain customer hangup before
+// the assistant's closing turn.
 const ABANDON_REASONS = new Set<string>([
-  "customer-ended-call",
   "customer-did-not-answer",
   "customer-did-not-give-microphone-permission",
   "customer-busy",
@@ -18,23 +18,45 @@ const ABANDON_REASONS = new Set<string>([
   "no-transcript",
 ]);
 
-/** Constant-time compare of the X-Vapi-Secret header against our shared secret.
- * Mirrors the old worker-callback posture: with a secret set, the header must
- * match (else reject); without one, allow in dev only. */
+function safeSecretMatch(provided: string | null, secret: string): boolean {
+  if (!provided) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(secret);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+function bearerToken(authorization: string | null): string | null {
+  if (!authorization) return null;
+  const [scheme, token] = authorization.split(/\s+/, 2);
+  return scheme?.toLowerCase() === "bearer" && token ? token : null;
+}
+
+/** Constant-time compare of the legacy X-Vapi-Secret header against our shared
+ * secret. Mirrors the worker-callback posture: with a secret set, the header
+ * must match (else reject); without one, allow in dev only. */
 export function verifyVapiSecret(provided: string | null, secret: string | undefined, isProd: boolean): "ok" | 401 | 503 {
   if (secret) {
-    if (!provided) return 401;
-    const a = Buffer.from(provided);
-    const b = Buffer.from(secret);
-    return a.length === b.length && timingSafeEqual(a, b) ? "ok" : 401;
+    return safeSecretMatch(provided, secret) ? "ok" : 401;
   }
   return isProd ? 503 : "ok";
+}
+
+export function verifyVapiRequest(
+  headers: { xVapiSecret: string | null; authorization: string | null },
+  secret: string | undefined,
+  isProd: boolean,
+): "ok" | 401 | 503 {
+  if (!secret) return isProd ? 503 : "ok";
+  if (safeSecretMatch(headers.xVapiSecret, secret)) return "ok";
+  if (safeSecretMatch(bearerToken(headers.authorization), secret)) return "ok";
+  return 401;
 }
 
 interface ReportMessage {
   role?: unknown;
   content?: unknown;
   message?: unknown; // some payloads use `message` instead of `content`
+  transcript?: unknown;
 }
 
 export interface ParsedReport {
@@ -51,11 +73,24 @@ function turnsFromMessages(messages: unknown): Turn[] {
       const rec = m as ReportMessage;
       const role = rec.role === "user" ? "user" : rec.role === "assistant" || rec.role === "bot" ? "assistant" : null;
       if (!role) return null; // drop system / tool / function rows
-      const text = typeof rec.content === "string" ? rec.content : typeof rec.message === "string" ? rec.message : "";
+      const text = textFrom(rec.content) || textFrom(rec.message) || textFrom(rec.transcript);
       return { role, text };
     })
     .filter((t): t is { role: string; text: string } => t !== null);
   return sanitizeTranscript(raw);
+}
+
+function textFrom(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map(textFrom).filter(Boolean).join(" ");
+  if (!value || typeof value !== "object") return "";
+  const rec = value as { text?: unknown; content?: unknown };
+  return textFrom(rec.text) || textFrom(rec.content);
+}
+
+function assistantClosed(transcript: Turn[]): boolean {
+  const lastAssistant = [...transcript].reverse().find((t) => t.role === "assistant")?.text.toLowerCase() ?? "";
+  return /\b(that'?s everything|feedback'?s being|feedback is being|take care|you'?ll see it in a moment)\b/.test(lastAssistant);
 }
 
 /** Classify the call. Abandoned when there is no candidate speech, or the end
@@ -64,6 +99,7 @@ export function classifyOutcome(transcript: Turn[], endedReason: string | undefi
   const userTurns = transcript.filter((t) => t.role === "user").length;
   if (userTurns === 0) return "abandoned";
   if (endedReason && ABANDON_REASONS.has(endedReason)) return "abandoned";
+  if (endedReason === "customer-ended-call" && !assistantClosed(transcript)) return "abandoned";
   return "completed";
 }
 
@@ -75,18 +111,21 @@ export function mapReport(msg: unknown): ParsedReport {
   const call = (m.call ?? {}) as Record<string, unknown>;
   const assistantMeta = (assistant.metadata ?? {}) as Record<string, unknown>;
   const callMeta = (call.metadata ?? {}) as Record<string, unknown>;
+  const messageMeta = (m.metadata ?? {}) as Record<string, unknown>;
+  const artifact = (m.artifact ?? {}) as Record<string, unknown>;
 
   const attemptId =
     (typeof assistantMeta.attemptId === "string" && assistantMeta.attemptId) ||
     (typeof callMeta.attemptId === "string" && callMeta.attemptId) ||
+    (typeof messageMeta.attemptId === "string" && messageMeta.attemptId) ||
     null;
   const assistantId =
     (typeof assistant.id === "string" && assistant.id) ||
     (typeof call.assistantId === "string" && call.assistantId) ||
     null;
 
-  const transcript = turnsFromMessages(m.messages ?? (m.artifact as Record<string, unknown>)?.messages);
-  const endedReason = typeof call.endedReason === "string" ? call.endedReason : undefined;
+  const transcript = turnsFromMessages(m.messages ?? artifact.messages ?? artifact.messagesOpenAIFormatted);
+  const endedReason = typeof m.endedReason === "string" ? m.endedReason : typeof call.endedReason === "string" ? call.endedReason : undefined;
 
   return { attemptId, assistantId, transcript, outcome: classifyOutcome(transcript, endedReason) };
 }

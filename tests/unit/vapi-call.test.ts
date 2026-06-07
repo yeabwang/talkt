@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
 import {
+  assistantSpeechFromMessage,
   disconnectStatus,
   mergeTurn,
   transcriptBlocks,
@@ -25,6 +26,19 @@ test("mergeTurn appends a new role / a finalized turn", () => {
     turns.map((t) => t.role),
     ["assistant", "user"],
   );
+});
+
+test("mergeTurn replaces a partial assistant transcript with full assistant speech", () => {
+  let turns: TranscriptTurn[] = [];
+  turns = mergeTurn(turns, "assistant", "Question", false);
+  turns = mergeTurn(turns, "assistant", "Question one?", true, "assistant-speech-0");
+  assert.equal(turns.length, 1);
+  assert.deepEqual(turns[0], {
+    role: "assistant",
+    text: "Question one?",
+    final: true,
+    segmentId: "assistant-speech-0",
+  });
 });
 
 test("transcriptBlocks coalesces consecutive same-role turns", () => {
@@ -54,4 +68,14 @@ test("transcriptFromMessage maps Vapi transcript messages, ignores others", () =
     final: false,
   });
   assert.equal(transcriptFromMessage({ type: "status-update" }), null);
+});
+
+test("assistantSpeechFromMessage maps Vapi full assistant speech events", () => {
+  assert.deepEqual(assistantSpeechFromMessage({ type: "assistant.speechStarted", text: "Full question?", turn: 2 }), {
+    role: "assistant",
+    text: "Full question?",
+    final: true,
+    segmentId: "assistant-speech-2",
+  });
+  assert.equal(assistantSpeechFromMessage({ type: "transcript", text: "Nope" }), null);
 });

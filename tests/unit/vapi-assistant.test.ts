@@ -36,13 +36,23 @@ test("builds a Vapi-native model assistant with system prompt + first message", 
   assert.match(a.model.messages[0].content, /You are Adi/);
   assert.match(a.firstMessage, /Let's jump straight in\. Q1\?/);
   assert.equal(a.firstMessageMode, "assistant-speaks-first");
+  assert.equal(a.firstMessageInterruptionsEnabled, false);
+  assert.equal(a.modelOutputInMessagesEnabled, true);
+  assert.deepEqual(a.clientMessages, ["transcript", "speech-update", "status-update", "assistant.speechStarted"]);
 });
 
 test("wires the webhook URL (no double slash) + secret + serverMessages", () => {
   const a = buildVapiAssistant(job(), env);
   assert.equal(a.server.url, "https://talkt.app/api/vapi/webhook");
-  assert.equal(a.server.secret, "whsec");
+  assert.deepEqual(a.server.headers, { "X-Vapi-Secret": "whsec" });
+  assert.equal(a.server.timeoutSeconds, 20);
   assert.deepEqual(a.serverMessages, ["end-of-call-report"]);
+});
+
+test("uses a Vapi credential id for webhook auth when configured", () => {
+  const a = buildVapiAssistant(job(), { ...env, webhookCredentialId: "cred_123" });
+  assert.equal(a.server.credentialId, "cred_123");
+  assert.equal(a.server.headers, undefined);
 });
 
 test("assistant name stays within Vapi's 40-char limit even for a full cuid", () => {
@@ -55,6 +65,7 @@ test("carries the cap, the end-call tool, and attempt metadata", () => {
   const a = buildVapiAssistant(job({ maxDurationSeconds: 600 }), env);
   assert.equal(a.maxDurationSeconds, 600);
   assert.deepEqual(a.model.tools, [{ type: "endCall" }]);
+  assert.deepEqual(a.endCallPhrases, ["Take care."]);
   assert.deepEqual(a.metadata, { attemptId: "a1" });
 });
 
@@ -69,6 +80,8 @@ test("resolves the persona + language voice", () => {
 test("English uses LiveKit smart endpointing; other languages use patient transcription timeouts", () => {
   const en = buildVapiAssistant(job({ languageCode: "en" }), env);
   assert.deepEqual(en.startSpeakingPlan, { waitSeconds: 0.8, smartEndpointingPlan: { provider: "livekit" } });
+  assert.equal(en.stopSpeakingPlan.numWords, 1);
+  assert.ok(en.stopSpeakingPlan.acknowledgementPhrases.includes("okay"));
 
   const plan = buildVapiAssistant(job({ languageCode: "es" }), env).startSpeakingPlan;
   assert.ok("transcriptionEndpointingPlan" in plan, "non-English should use transcription endpointing");

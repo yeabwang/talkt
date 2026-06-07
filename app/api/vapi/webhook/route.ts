@@ -7,8 +7,8 @@
 //
 // Idempotent: grading collapses via the `grade-${attemptId}` key and the
 // in_progress guard, so a retry/double-fire is harmless. Auth mirrors the old
-// posture: with VAPI_WEBHOOK_SECRET set the X-Vapi-Secret header must match; in
-// production a missing secret fails closed.
+// posture: with VAPI_WEBHOOK_SECRET set, either X-Vapi-Secret or
+// Authorization: Bearer must match; in production a missing secret fails closed.
 import { tasks } from "@trigger.dev/sdk";
 import type { NextRequest } from "next/server";
 
@@ -17,7 +17,7 @@ import { jsonError } from "@/lib/api";
 import { findAttemptForWebhook, markAbandoned } from "@/lib/db/attempts";
 import { processSessionEnded, type SessionEndedDeps } from "@/lib/session-ended";
 import { deleteAssistant } from "@/lib/vapi/server";
-import { mapReport, verifyVapiSecret } from "@/lib/vapi/webhook";
+import { mapReport, verifyVapiRequest } from "@/lib/vapi/webhook";
 
 const SECRET = process.env.VAPI_WEBHOOK_SECRET;
 
@@ -37,7 +37,14 @@ const deps: SessionEndedDeps = {
 };
 
 export async function POST(req: NextRequest) {
-  const auth = verifyVapiSecret(req.headers.get("x-vapi-secret"), SECRET, process.env.NODE_ENV === "production");
+  const auth = verifyVapiRequest(
+    {
+      xVapiSecret: req.headers.get("x-vapi-secret"),
+      authorization: req.headers.get("authorization"),
+    },
+    SECRET,
+    process.env.NODE_ENV === "production",
+  );
   if (auth === 401) return jsonError("Unauthorized", 401);
   if (auth === 503) {
     console.error("[vapi/webhook] VAPI_WEBHOOK_SECRET is not set — rejecting callback");

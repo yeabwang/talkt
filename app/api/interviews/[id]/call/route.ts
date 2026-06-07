@@ -9,7 +9,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import type { NextRequest } from "next/server";
 
 import { jsonError, notFound, tooManyRequests, unauthorized } from "@/lib/api";
-import { createAttempt, storeVapiIds } from "@/lib/db/attempts";
+import { createAttempt, markFailed, storeVapiIds } from "@/lib/db/attempts";
 import { getInterview } from "@/lib/db/interviews";
 import { ensureUser } from "@/lib/db/users";
 import { resolveVoiceAgent } from "@/lib/db/voice-agents";
@@ -17,7 +17,7 @@ import { toLanguageCode } from "@/lib/language";
 import { createRateLimiter } from "@/lib/rate-limit";
 import { buildVapiAssistant } from "@/lib/vapi/assistant";
 import { buildInterviewJob } from "@/lib/vapi/job";
-import { createAssistant } from "@/lib/vapi/server";
+import { createAssistant, deleteAssistant } from "@/lib/vapi/server";
 
 // Starting a call creates an ephemeral assistant + opens an Attempt row. 10/min/user
 // is well above real use and blocks rapid-fire abuse.
@@ -31,9 +31,10 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
   if (!decision.allowed) return tooManyRequests(decision.retryAfterMs, "Too many requests. Please wait a moment.");
 
   const publicKey = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY;
+  const privateKey = process.env.VAPI_PRIVATE_KEY;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
   const webhookSecret = process.env.VAPI_WEBHOOK_SECRET;
-  if (!publicKey || !appUrl || !webhookSecret) {
+  if (!publicKey || !privateKey || !appUrl || !webhookSecret) {
     console.error("[call] Vapi env not fully configured");
     return jsonError("Voice service is not configured.", 503);
   }
@@ -61,8 +62,9 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
   const assistantPayload = buildVapiAssistant(job, {
     appUrl,
     webhookSecret,
+    webhookCredentialId: process.env.VAPI_WEBHOOK_CREDENTIAL_ID,
     modelProvider: process.env.VAPI_MODEL_PROVIDER || "openai",
-    model: process.env.VAPI_MODEL || "gpt-4.1-mini",
+    model: process.env.VAPI_MODEL || "gpt-4.1",
     transcriberProvider: process.env.VAPI_TRANSCRIBER_PROVIDER || "deepgram",
     transcriberModel: process.env.VAPI_TRANSCRIBER_MODEL || "nova-3",
   });
@@ -72,9 +74,18 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     assistantId = await createAssistant(assistantPayload);
   } catch (err) {
     console.error("[call] Vapi assistant create failed:", err);
+    await markFailed(attemptId);
     return jsonError("Could not start the interview. Please try again.", 502);
   }
-  await storeVapiIds(attemptId, { assistantId });
+
+  try {
+    await storeVapiIds(attemptId, { assistantId });
+  } catch (err) {
+    console.error("[call] Vapi assistant id store failed:", err);
+    await markFailed(attemptId);
+    await deleteAssistant(assistantId);
+    return jsonError("Could not start the interview. Please try again.", 502);
+  }
 
   return Response.json({
     attemptId,
