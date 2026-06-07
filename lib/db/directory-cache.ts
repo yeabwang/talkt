@@ -9,6 +9,14 @@ export const DIRECTORY_TTL_SECONDS = 60;
 /** Hard cap on directory rows read and served. */
 export const DIRECTORY_MAX_ROWS = 200;
 
+// Immediate expiry, not "max" (stale-while-revalidate). Publish/vote happen in a
+// Route Handler doing read-your-own-writes: the mutating user must see the new
+// row on the *next* directory read, not after a second background refresh. "max"
+// served the stale list first, so a freshly published template did not appear.
+// updateTag() would be ideal but is Server-Action-only; { expire: 0 } is the
+// documented Route Handler equivalent. See docs/caching-strategy.md.
+export const DIRECTORY_REVALIDATE_PROFILE = { expire: 0 } as const;
+
 /** Cached public directory rows without per-viewer data. */
 export const cachedDirectoryRows = unstable_cache(
   async (): Promise<InterviewRow[]> => {
@@ -26,6 +34,6 @@ export const cachedDirectoryRows = unstable_cache(
 
 /** Invalidate the cached directory after a mutation that changes its contents. */
 export function revalidateDirectory(): void {
-  // Next 16 requires the profile argument; "max" enables stale-while-revalidate.
-  revalidateTag(DIRECTORY_TAG, "max");
+  // Immediate expiry so the mutating user sees their write on the next read.
+  revalidateTag(DIRECTORY_TAG, DIRECTORY_REVALIDATE_PROFILE);
 }
