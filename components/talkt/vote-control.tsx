@@ -50,9 +50,11 @@ export function VoteControl({
       const nextVote: -1 | 0 | 1 = prev.myVote === direction ? 0 : direction;
 
       // Optimistic: shift tallies by the delta between the old and new vote.
+      // Clamp at 0 — if the seeded myVote/count ever desync (e.g. a prior vote
+      // POST failed mid-flight), clearing a vote must not render a negative count.
       const next: VoteState = {
-        upvotes: prev.upvotes - (prev.myVote === 1 ? 1 : 0) + (nextVote === 1 ? 1 : 0),
-        downvotes: prev.downvotes - (prev.myVote === -1 ? 1 : 0) + (nextVote === -1 ? 1 : 0),
+        upvotes: Math.max(0, prev.upvotes - (prev.myVote === 1 ? 1 : 0) + (nextVote === 1 ? 1 : 0)),
+        downvotes: Math.max(0, prev.downvotes - (prev.myVote === -1 ? 1 : 0) + (nextVote === -1 ? 1 : 0)),
         myVote: nextVote,
       };
       setState(next);
