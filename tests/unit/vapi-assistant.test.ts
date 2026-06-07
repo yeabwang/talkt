@@ -77,6 +77,19 @@ test("resolves the persona + language voice", () => {
   assert.equal(en.transcriber.language, "en");
 });
 
+test("normalizes nova-3 transcriber languages to Vapi-supported values", () => {
+  const supported = buildVapiAssistant(job({ languageCode: "pt_BR" }), env);
+  assert.equal(supported.transcriber.language, "pt-BR");
+
+  const unsupported = buildVapiAssistant(job({ languageCode: "zh" }), env);
+  assert.equal(unsupported.transcriber.language, "multi");
+});
+
+test("leaves non-nova-3 transcriber language codes unchanged", () => {
+  const a = buildVapiAssistant(job({ languageCode: "zh" }), { ...env, transcriberModel: "nova-2" });
+  assert.equal(a.transcriber.language, "zh");
+});
+
 test("English uses smart endpointing; other languages use patient transcription timeouts", () => {
   const en = buildVapiAssistant(job({ languageCode: "en" }), env);
   assert.deepEqual(en.startSpeakingPlan, { waitSeconds: 0.8, smartEndpointingPlan: { provider: "livekit" } });

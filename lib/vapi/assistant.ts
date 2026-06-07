@@ -51,6 +51,69 @@ export interface AssistantPayload {
 const START_WAIT_SECONDS = 0.8;
 const PATIENT_NO_PUNCTUATION_SECONDS = 2.2;
 const WEBHOOK_TIMEOUT_SECONDS = 20;
+const NOVA_3_LANGUAGE_BY_CODE: Record<string, string> = {
+  en: "en",
+  "en-us": "en-US",
+  "en-au": "en-AU",
+  "en-gb": "en-GB",
+  "en-in": "en-IN",
+  "en-nz": "en-NZ",
+  de: "de",
+  "de-ch": "de-CH",
+  nl: "nl",
+  "nl-be": "nl-BE",
+  sv: "sv",
+  "sv-se": "sv-SE",
+  da: "da",
+  "da-dk": "da-DK",
+  es: "es",
+  "es-419": "es-419",
+  fr: "fr",
+  "fr-ca": "fr-CA",
+  pt: "pt",
+  "pt-br": "pt-BR",
+  "pt-pt": "pt-PT",
+  it: "it",
+  tr: "tr",
+  no: "no",
+  id: "id",
+  be: "be",
+  bg: "bg",
+  bn: "bn",
+  bs: "bs",
+  ca: "ca",
+  cs: "cs",
+  et: "et",
+  fi: "fi",
+  el: "el",
+  fa: "fa",
+  he: "he",
+  hi: "hi",
+  hr: "hr",
+  hu: "hu",
+  ja: "ja",
+  kn: "kn",
+  ko: "ko",
+  "ko-kr": "ko-KR",
+  lv: "lv",
+  lt: "lt",
+  mk: "mk",
+  mr: "mr",
+  ms: "ms",
+  pl: "pl",
+  ro: "ro",
+  ru: "ru",
+  sk: "sk",
+  sl: "sl",
+  sr: "sr",
+  ta: "ta",
+  te: "te",
+  tl: "tl",
+  uk: "uk",
+  ur: "ur",
+  vi: "vi",
+  multi: "multi",
+};
 
 export interface BuildAssistantEnv {
   appUrl: string;
@@ -61,6 +124,14 @@ export interface BuildAssistantEnv {
   transcriberProvider: string;
   transcriberModel: string;
   voiceEnv?: Record<string, string | undefined>;
+}
+
+function vapiTranscriberLanguage(languageCode: string, transcriberModel: string): string {
+  const requested = languageCode.trim().replace(/_/g, "-") || "en";
+  if (transcriberModel.trim().toLowerCase() !== "nova-3") return requested;
+
+  const nova3Language = NOVA_3_LANGUAGE_BY_CODE[requested.toLowerCase()];
+  return nova3Language ?? "multi";
 }
 
 export function buildVapiAssistant(job: InterviewJob, env: BuildAssistantEnv): AssistantPayload {
@@ -104,7 +175,11 @@ export function buildVapiAssistant(job: InterviewJob, env: BuildAssistantEnv): A
     },
     modelOutputInMessagesEnabled: true,
     voice,
-    transcriber: { provider: env.transcriberProvider, model: env.transcriberModel, language: job.languageCode },
+    transcriber: {
+      provider: env.transcriberProvider,
+      model: env.transcriberModel,
+      language: vapiTranscriberLanguage(job.languageCode, env.transcriberModel),
+    },
     startSpeakingPlan,
     stopSpeakingPlan: {
       numWords: 1,
