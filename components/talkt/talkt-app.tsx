@@ -343,6 +343,32 @@ export function TalkTApp() {
   const paramInterviewId = params.interviewId as string | undefined;
   const interview = paramInterview ?? findInterview(paramInterviewId);
 
+  // Lobby/live need a concrete interview. On a direct URL nav the directory may
+  // still be loading (allInterviews empty), so `active` is briefly undefined —
+  // render a loader instead of crashing on `interview.title`. If the directory
+  // has loaded and nothing resolves, show a not-found with a way back.
+  if (route === "lobby" || route === "live") {
+    const active = interview ?? allInterviews[0];
+    if (!active) {
+      return (
+        <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "var(--background)", padding: 32 }}>
+          <div className="text-center" style={{ maxWidth: 360 }}>
+            {directoryLoading ? (
+              <p className="caption">Loading interview…</p>
+            ) : (
+              <>
+                <p className="caption" style={{ marginBottom: 16 }}>Interview not found.</p>
+                <button className="btn btn-secondary" type="button" onClick={() => navigate("dashboard")}>
+                  Back to dashboard
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+  }
+
   if (route === "lobby") {
     const active = interview ?? allInterviews[0];
     return (
