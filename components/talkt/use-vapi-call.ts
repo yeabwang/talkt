@@ -1,14 +1,7 @@
 "use client";
 
-// React hook around `@vapi-ai/web` for a single interview web call. Keeps the
-// compact surface `live-screen.tsx` consumes. The browser starts the call with
-// the ephemeral assistant id minted server-side (the prompt/questions never reach
-// here). Vapi runs STT/LLM/TTS; we mirror transcript + speaking state for the UI.
-// Assistant turns prefer `assistant.speechStarted` full-text events, buffered
-// until speech-end, so the transcript drawer shows complete interviewer turns
-// instead of fragile partial speech transcripts.
-//
-// `@vapi-ai/web` is imported lazily on start() so it never runs during SSR.
+// React hook around one @vapi-ai/web interview call.
+// The assistant is created server-side; this hook only mirrors call state for the UI.
 import * as React from "react";
 
 export type CallStatus = "idle" | "connecting" | "active" | "ended" | "error";
@@ -25,8 +18,6 @@ export interface TranscriptBlock {
   text: string;
   final: boolean;
 }
-
-// ── Pure helpers (unit-tested in tests/unit/vapi-call.test.ts) ──────────────
 
 /** Append a final turn, or replace the trailing partial for the same role. */
 export function mergeTurn(
@@ -127,8 +118,6 @@ export function assistantSpeechFromMessage(
   return { role: "assistant", text, final: true, segmentId: id };
 }
 
-// ── Hook ───────────────────────────────────────────────────────────────────
-
 export interface UseVapiCall {
   status: CallStatus;
   turns: TranscriptTurn[];
@@ -137,19 +126,16 @@ export interface UseVapiCall {
   volume: number;
   muted: boolean;
   error: string | null;
-  // False from connect until the interviewer's first word (speech or transcript).
-  // Drives the "connecting to your interviewer…" copy that covers Vapi's
-  // few-second pipeline warm-up so the candidate isn't staring at silence.
+  // False until the first interviewer speech or transcript event arrives.
   interviewerStarted: boolean;
-  // True once the candidate ended the call themselves (hit End). Drives only the
-  // "you ended early" UI copy — the webhook decides completed-vs-abandoned.
+  // True when the user ends the call from the client.
   endedManually: boolean;
   start: (assistantId: string, publicKey: string) => Promise<void>;
   stop: (manual?: boolean) => void;
   toggleMute: () => void;
 }
 
-// Minimal structural type for the Vapi client (lazy-loaded in start()).
+// Structural type for the lazily imported Vapi client.
 interface VapiLike {
   start: (assistantId: string) => Promise<unknown>;
   stop: () => void | Promise<void>;
@@ -161,8 +147,7 @@ interface VapiLike {
 
 const UNMOUNT_CLEANUP_DELAY_MS = 50;
 
-// Daily only supports one active call object by default. Keep that invariant
-// across fast route changes/remounts instead of opting into multiple instances.
+// Keep one active client across fast route changes and remounts.
 let activeVapiClient: VapiLike | null = null;
 
 function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
@@ -242,8 +227,7 @@ export function useVapiCall(): UseVapiCall {
     setTurns((prev) => buffered.reduce((next, item) => mergeTurn(next, "assistant", item.text, true, item.segmentId), prev));
   }, []);
 
-  // The interviewer has "started" the moment it produces any output — speech or
-  // a transcript. Fire once; cheap idempotent guard avoids extra renders.
+  // Mark the interviewer as started on the first speech or transcript event.
   const markInterviewerStarted = React.useCallback(() => {
     if (interviewerStartedRef.current) return;
     interviewerStartedRef.current = true;
@@ -348,7 +332,7 @@ export function useVapiCall(): UseVapiCall {
           if (t.role === "assistant" && assistantSpeechSeenRef.current) return;
           pushTranscript(t.role, t.text, t.final);
           if (t.role === "user") {
-            // Drive the candidate tile's speaking flag off transcript activity.
+            // Candidate speaking state follows transcript activity.
             setUserSpeaking(true);
             if (userSpeakingTimer.current) window.clearTimeout(userSpeakingTimer.current);
             userSpeakingTimer.current = window.setTimeout(() => setUserSpeaking(false), 1200);

@@ -5,12 +5,8 @@ import * as React from "react";
 import { Icon, TalkTButton } from "@/components/talkt/primitives";
 
 /**
- * Contribute-to-the-community dialog. The author is credited by their own name
- * by default; they may opt to publish anonymously instead. Pure UI — the caller
- * wires up persistence/publish.
+ * Publish dialog with optional anonymous attribution.
  */
-// Mount this only while open (callers render it conditionally) so each open
-// starts with fresh form state — no reset effect needed.
 export function PublishDialog({
   defaultName,
   busy = false,

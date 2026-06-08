@@ -1,6 +1,4 @@
-// Interview repository: directory reads, single fetch, builder persistence,
-// and publishing. All reads go through the DTO seam so callers never see
-// ownerId or other users' data.
+// Interview repository for directory reads, builder persistence, and publishing.
 import type { Interview as UiInterview } from "@/components/talkt/data";
 import { cachedDirectoryRows, revalidateDirectory } from "@/lib/db/directory-cache";
 import { prisma } from "@/lib/prisma";
@@ -9,7 +7,7 @@ import { toLanguageCode } from "@/lib/language";
 import { paginateById, type Page } from "@/lib/pagination";
 import { rankScore } from "@/lib/ranking";
 
-/** Fetch the caller's votes for a set of interviews -> { interviewId: 1 | -1 }. */
+/** Fetch the caller's votes for a set of interviews. */
 async function votesByViewer(viewerId: string | null, interviewIds: string[]): Promise<Map<string, -1 | 1>> {
   const map = new Map<string, -1 | 1>();
   if (!viewerId || interviewIds.length === 0) return map;
@@ -22,9 +20,7 @@ async function votesByViewer(viewerId: string | null, interviewIds: string[]): P
 }
 
 /**
- * The public directory: visible (public, not flagged) interviews ordered by
- * directory rank, with the caller's own vote attached. Includes seeded
- * templates and published community customs.
+ * Public directory ordered by rank, with the caller's vote attached.
  */
 export async function listDirectory(viewerId: string | null): Promise<UiInterview[]> {
   const rows = await cachedDirectoryRows();
@@ -38,12 +34,7 @@ export async function listDirectory(viewerId: string | null): Promise<UiIntervie
 }
 
 /**
- * A cursor-paginated slice of the directory. The cached rows are already bounded
- * (DIRECTORY_MAX_ROWS) and rank-ordered, so we page over them in memory and only
- * resolve the per-viewer vote overlay for the items on the returned page. The
- * default limit covers the whole bounded set, so a single call still returns the
- * full directory (the client filters/searches client-side); pass `limit`/`cursor`
- * to page for large-catalog or external consumers.
+ * Cursor-paginated directory slice with per-viewer votes resolved for that page.
  */
 export async function listDirectoryPage(
   viewerId: string | null,
@@ -62,8 +53,7 @@ export async function listDirectoryPage(
 }
 
 /**
- * A single interview the caller is allowed to see: any public non-flagged one,
- * or one they own (private/flagged included). Returns null otherwise.
+ * Fetch one interview visible to the caller, including their private owned rows.
  */
 export async function getInterview(id: string, viewerId: string | null): Promise<UiInterview | null> {
   const row = await prisma.interview.findUnique({ where: { id }, select: interviewRowSelect });
@@ -88,7 +78,7 @@ export interface BuilderInterviewInput {
   blurb?: string;
   minutes?: number;
   focus?: string[];
-  language?: string; // display label; converted to ISO for storage
+  language?: string;
   voiceId?: string;
   questions: string[];
   dimensions?: { key: string; label: string }[];
@@ -125,8 +115,6 @@ export type PublishResult =
 
 /**
  * Publish a custom interview to the public directory. Enforces ownership.
- * `displayName` is the public credit; when `anonymous`, no name is stored and
- * the rank carries the anonymity down-weight.
  */
 export async function publish(
   id: string,

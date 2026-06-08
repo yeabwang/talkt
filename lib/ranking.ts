@@ -1,10 +1,9 @@
-// Pure vote-ranking math for the template directory. No DB or framework deps —
-// unit-tested with crafted literals (see tests/unit/ranking.test.ts).
+// Vote-ranking math for the template directory.
 
 /** z for a 95% confidence interval. */
 export const WILSON_Z = 1.96;
 
-/** Anonymous templates keep this fraction of their score (35% down-weight). Internal only. */
+/** Anonymous templates keep this fraction of their score. */
 export const ANONYMITY_KEEP = 0.65;
 
 /** Auto-flag guard: a template needs at least this many votes before takedown is possible. */
@@ -16,10 +15,8 @@ export const FLAG_DOWNVOTE_SHARE = 0.4;
 /**
  * Wilson score lower bound of the upvote ratio at a 95% confidence interval.
  *
- * Ranks by the *quality* of votes, not the raw count: a 9/10 template can
- * outrank a 50/60 one only when the smaller sample justifies it, and brand-new
- * items are neither unfairly buried nor boosted. Returns 0 when there are no
- * votes. Result is in [0, 1].
+ * Ranks by confidence-adjusted vote quality rather than raw count. Returns 0
+ * when there are no votes. Result is in [0, 1].
  */
 export function wilsonLowerBound(up: number, down: number, z: number = WILSON_Z): number {
   const upClamped = Math.max(0, up);
@@ -35,9 +32,7 @@ export function wilsonLowerBound(up: number, down: number, z: number = WILSON_Z)
 }
 
 /**
- * Directory rank score for a template: the Wilson lower bound, down-weighted
- * when the template was published anonymously. The penalty is intentionally not
- * surfaced anywhere in the UI or API.
+ * Directory rank score: Wilson lower bound with an internal anonymity penalty.
  */
 export function rankScore(up: number, down: number, anonymous: boolean): number {
   const base = wilsonLowerBound(up, down);
@@ -45,9 +40,7 @@ export function rankScore(up: number, down: number, anonymous: boolean): number 
 }
 
 /**
- * Whether a template should be auto-flagged (hidden + queued for admin review).
- * Only once it has accumulated enough votes to judge fairly (the small-sample
- * guard), and only when downvotes dominate.
+ * Whether a template should be hidden and queued for review.
  */
 export function shouldFlag(up: number, down: number): boolean {
   const n = Math.max(0, up) + Math.max(0, down);

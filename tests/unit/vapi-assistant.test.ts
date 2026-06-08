@@ -56,7 +56,7 @@ test("uses a Vapi credential id for webhook auth when configured", () => {
 });
 
 test("assistant name stays within Vapi's 40-char limit even for a full cuid", () => {
-  // Prisma cuid() is 25 chars; `talkt-interview-<cuid>` (41) used to 400.
+  // Vapi assistant names are capped at 40 characters.
   const a = buildVapiAssistant(job({ attemptId: "clz1234567890abcdefghijkl" }), env);
   assert.ok(a.name.length <= 40, `name too long: ${a.name.length}`);
 });
@@ -83,7 +83,20 @@ test("resolves the persona + language voice and speaks the interview language", 
   assert.equal(en.transcriber.language, "en");
 });
 
-test("English uses LiveKit smart endpointing; other languages use patient transcription timeouts", () => {
+test("normalizes nova-3 transcriber languages to Vapi-supported values", () => {
+  const supported = buildVapiAssistant(job({ languageCode: "pt_BR" }), env);
+  assert.equal(supported.transcriber.language, "pt-BR");
+
+  const unsupported = buildVapiAssistant(job({ languageCode: "zh" }), env);
+  assert.equal(unsupported.transcriber.language, "multi");
+});
+
+test("leaves non-nova-3 transcriber language codes unchanged", () => {
+  const a = buildVapiAssistant(job({ languageCode: "zh" }), { ...env, transcriberModel: "nova-2" });
+  assert.equal(a.transcriber.language, "zh");
+});
+
+test("English uses smart endpointing; other languages use patient transcription timeouts", () => {
   const en = buildVapiAssistant(job({ languageCode: "en" }), env);
   assert.deepEqual(en.startSpeakingPlan, { waitSeconds: 0.8, smartEndpointingPlan: { provider: "livekit" } });
   assert.equal(en.stopSpeakingPlan.numWords, 1);

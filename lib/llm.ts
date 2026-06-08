@@ -1,10 +1,6 @@
-// DeepSeek (OpenAI-compatible) chat client.
-// Robust JSON mode: forces a JSON object response, strips stray fences,
-// parses, and retries with exponential backoff + jitter on transport/parse
-// failure. Server-only — never import from a client component.
+// Server-side OpenAI-compatible chat client for JSON responses.
 
-// Accept either the generic LLM_* names or the provider-specific DEEPSEEK_*
-// names used in .env.example — whichever is set.
+// Prefer generic LLM_* env vars; keep DEEPSEEK_* aliases for current deployments.
 const API_KEY = process.env.LLM_API_KEY ?? process.env.DEEPSEEK_API_KEY;
 const BASE_URL = (process.env.LLM_BASE_URL ?? process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com").replace(/\/$/, "");
 const MODEL = process.env.LLM_MODEL ?? process.env.DEEPSEEK_MODEL ?? "deepseek-chat";
@@ -73,8 +69,7 @@ export async function chatJSON<T = unknown>(
   throw new Error(`LLM request failed after ${maxRetries} attempts: ${String(lastError)}`);
 }
 
-// Strip ```json fences if a model wraps the object, then parse. Falls back to
-// the first {...} span so a stray prose preamble can't break the turn.
+// Accept fenced JSON or a JSON object embedded in a short prose wrapper.
 function parseJSONObject<T>(raw: string): T {
   const cleaned = raw.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
   try {

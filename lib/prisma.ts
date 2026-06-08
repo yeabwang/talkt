@@ -1,5 +1,7 @@
 // Prisma client singleton. Branches by DATABASE_URL:
-
+//   - prisma+postgres:// (Prisma Postgres) → connect through Accelerate,
+//     no local driver adapter.
+//   - everything else → direct Postgres (pooled TCP) via @prisma/adapter-pg.
 // Cached on globalThis in development so hot reload reuses one instance.
 import { Prisma, PrismaClient } from "./generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -11,8 +13,7 @@ function createPrisma(): PrismaClient {
     throw new Error("DATABASE_URL is not set");
   }
   if (connectionString.startsWith("prisma+postgres://")) {
-    // Prisma Postgres / Accelerate connection string — the generated client
-    // connects through Accelerate; no local pg driver adapter is used.
+    // Prisma Postgres / Accelerate connection string.
     return new PrismaClient({ accelerateUrl: connectionString });
   }
   // Direct Postgres via the pg driver adapter.

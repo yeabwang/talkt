@@ -1,7 +1,5 @@
-// In-memory fixed-window rate limiter for cost-bearing endpoints (LLM builder,
-// call start). Per-process only — adequate as a first-line abuse guard on a
-// single instance; swap for a shared store (Redis) if horizontally scaled.
-// Pure core (injectable clock) so it is unit-testable.
+// In-memory fixed-window limiter for cost-bearing endpoints.
+// Per-process only; use shared storage if the app runs on multiple instances.
 
 export interface RateLimiterOptions {
   limit: number;

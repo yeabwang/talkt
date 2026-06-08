@@ -1,7 +1,4 @@
-// GET /api/attempts/[id] — poll attempt status (+ feedback once ready).
-// Owner-scoped. The completed-vs-abandoned decision and grading are driven
-// server-side by the worker's session-ended callback, so there is no longer a
-// client PATCH (attach call id / abandon) — the results screen just polls here.
+// GET /api/attempts/[id]: owner-scoped status polling with feedback once ready.
 import { auth } from "@clerk/nextjs/server";
 import type { NextRequest } from "next/server";
 

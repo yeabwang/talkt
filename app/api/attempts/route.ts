@@ -1,5 +1,4 @@
-// GET /api/attempts — the signed-in user's graded attempt history (newest first)
-// for the Reports list and dashboard. Owner-scoped; only `ready` attempts.
+// GET /api/attempts: owner-scoped graded attempt history.
 import { auth } from "@clerk/nextjs/server";
 
 import { unauthorized } from "@/lib/api";

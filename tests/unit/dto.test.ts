@@ -1,7 +1,4 @@
-// Privacy-seam tests for lib/dto.ts toTemplateDTO — the single boundary that maps
-// a persisted Interview row to the client shape. The security contract: ownerId
-// and voter identities never cross it; anonymous authors are never named; per-
-// viewer fields (myVote, mine) only reflect the explicitly passed viewer context.
+// Privacy-boundary tests for lib/dto.ts toTemplateDTO.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 

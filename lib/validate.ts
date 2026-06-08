@@ -1,7 +1,4 @@
-// Tiny hand-rolled boundary validators. The codebase does not use a schema lib
-// (see app/api/builder/route.ts, which coerces by hand); these helpers keep API
-// route handlers terse while still rejecting malformed input before it reaches
-// the DB layer.
+// Boundary validators for API input.
 
 /** Thrown by parsers below; route handlers translate this to a 400. */
 export class ValidationError extends Error {

@@ -1,12 +1,9 @@
-// Maps a persisted Interview row to the client-facing shape the UI consumes
-// (components/talkt/data.ts `Interview`). This is the privacy seam: ownerId and
-// voter identities never cross it — only a public author credit, vote tallies,
-// and the caller's own vote.
+// Maps persisted interviews to the client shape without exposing owner ids or voter identities.
 
 import type { Interview as UiInterview } from "@/components/talkt/data";
 import { toLanguageLabel } from "./language";
 
-/** The subset of Interview columns (+ optional relations) the mapper needs. */
+/** Interview columns and relations required by the DTO mapper. */
 export interface InterviewRow {
   id: string;
   ownerId: string | null;
@@ -35,7 +32,7 @@ export interface InterviewRow {
   _count?: { attempts: number };
 }
 
-/** Per-caller view data computed in the repository (never derived on the client). */
+/** Per-caller fields supplied by repository reads. */
 export interface ViewerContext {
   myVote?: -1 | 0 | 1;
   mine?: boolean;
@@ -56,7 +53,7 @@ function iconFor(type: string, category: string): string {
   return ICON_BY_CATEGORY[category.trim().toLowerCase()] ?? "message-square";
 }
 
-/** Coerce the questions JSON column (string[] or [{text}]) to a string[]. */
+/** Coerce supported question JSON shapes to text. */
 function toQuestionTexts(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -136,7 +133,7 @@ export function toTemplateDTO(row: InterviewRow, viewer: ViewerContext = {}): Ui
   };
 }
 
-/** Column selection that satisfies InterviewRow, for use in Prisma findMany/findUnique. */
+/** Prisma selection that satisfies InterviewRow. */
 export const interviewRowSelect = {
   id: true,
   ownerId: true,

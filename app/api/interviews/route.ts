@@ -1,5 +1,4 @@
-// POST /api/interviews — persist a builder-generated interview as the caller's
-// private custom interview. Returns the stored interview (with its real id).
+// POST /api/interviews: persist a builder-generated private interview.
 import { auth } from "@clerk/nextjs/server";
 import type { NextRequest } from "next/server";
 

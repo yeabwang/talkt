@@ -1,8 +1,4 @@
-// Attempt repository. The directory's recommendation profile is derived from a
-// user's attempt history (which interviews, what level, what language). Also the
-// call lifecycle: create on start (stamped with its Vapi assistant id once
-// created), then move in_progress -> analyzing -> ready (or failed) as the
-// Vapi end-of-call webhook drives grading and writes Feedback.
+// Attempt repository for call lifecycle, grading status, history, and recommendation facets.
 import type { Interview as UiInterview } from "@/components/talkt/data";
 import type { AnalysisResult } from "@/lib/analysis";
 import { interviewRowSelect, toTemplateDTO, type InterviewRow } from "@/lib/dto";
@@ -10,8 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { toLanguageLabel } from "@/lib/language";
 import type { AttemptFacets } from "@/lib/recommend";
 
-/** Start an attempt row (status: in_progress). The Vapi call/assistant ids are
- * stamped later via storeVapiIds once the assistant is created. */
+/** Start an in-progress attempt row. */
 export async function createAttempt(userId: string, interviewId: string): Promise<string> {
   const attempt = await prisma.attempt.create({
     data: { userId, interviewId },
@@ -35,10 +30,7 @@ export async function storeVapiIds(
 }
 
 /**
- * Resolve the attempt the Vapi webhook (or the grade task) refers to — by
- * attemptId first, then by the ephemeral assistant id — and return it with its
- * interview mapped to the UI shape the analyzer consumes. Returns null when no
- * match.
+ * Resolve a Vapi callback or grading task to an attempt and its interview.
  */
 export async function findAttemptForWebhook(
   attemptId: string | null,
@@ -83,10 +75,7 @@ export async function findAttemptForReconcile(
 }
 
 /**
- * Flag an `in_progress` attempt abandoned: the candidate left mid-interview, so
- * it is never graded and stays out of history. The worker's session-ended
- * callback decides this server-side; only `in_progress` flips, so a completed/
- * graded attempt is never clobbered by a late callback.
+ * Mark an in-progress attempt abandoned without clobbering completed callbacks.
  */
 export async function markAbandoned(attemptId: string): Promise<void> {
   await prisma.attempt
@@ -108,12 +97,10 @@ export async function storeFeedback(
   result: AnalysisResult,
   rawBlobUrl: string | null,
 ): Promise<void> {
-  // Keep the per-dimension note alongside the score so the report can show why
-  // each dimension scored as it did (not just the number).
+  // Keep the per-dimension note beside its score for the report UI.
   const dimensionScores: Record<string, { score: number; note: string }> = {};
   for (const d of result.dimensionScores) dimensionScores[d.key] = { score: d.score, note: d.note };
-  // Prisma Json columns accept plain serializable values, not interface-typed
-  // arrays; round-trip to strip the nominal type.
+  // Prisma Json columns require plain serializable values.
   const perQuestion = JSON.parse(JSON.stringify(result.perQuestion)) as object[];
 
   const data = {
@@ -174,8 +161,7 @@ export async function getAttemptStatus(attemptId: string, userId: string): Promi
   if (row.status !== "ready" || !row.feedback) return { status: row.status };
 
   const fb = row.feedback;
-  // dimensionScores is { [key]: { score, note } } going forward; tolerate the
-  // legacy { [key]: number } shape from rows written before that change.
+  // Tolerate older rows written as { [key]: number }.
   const dimScores = (fb.dimensionScores ?? {}) as Record<string, number | { score?: number; note?: string }>;
   const perQuestion = (Array.isArray(fb.perQuestion) ? fb.perQuestion : []) as {
     question?: string;
@@ -216,10 +202,7 @@ export interface UserAttempt {
   voice: string;
 }
 
-/**
- * The user's graded attempts (status `ready`), newest first — the source for the
- * Reports list and dashboard history. Only scored attempts are returned.
- */
+/** The user's graded attempts, newest first. */
 export async function listUserAttempts(userId: string): Promise<UserAttempt[]> {
   const rows = await prisma.attempt.findMany({
     where: { userId, status: "ready", feedback: { isNot: null } },
@@ -253,10 +236,7 @@ export async function listUserAttempts(userId: string): Promise<UserAttempt[]> {
   });
 }
 
-/**
- * The facets of a user's past attempts, newest first, for buildProfile().
- * `takenAt` uses the attempt start time; language is returned as a display label.
- */
+/** Attempt facets for the recommendation profile, newest first. */
 export async function listAttemptFacets(userId: string): Promise<AttemptFacets[]> {
   const rows = await prisma.attempt.findMany({
     where: { userId },

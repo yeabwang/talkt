@@ -1,6 +1,4 @@
-// Boundary sanitizer for client-submitted call transcripts before they reach the
-// grading task. Caps turn count and per-turn length to bound payload size and
-// downstream LLM cost; normalizes role to user/assistant.
+// Sanitizes transcript payloads before they reach grading.
 
 export const MAX_TURNS = 400;
 export const MAX_TURN_CHARS = 4000;

@@ -1,7 +1,4 @@
-// Transcript analysis: turn a finished call's transcript into structured
-// feedback via DeepSeek (lib/llm.ts robust JSON + retry). Scores the per-role
-// dimensions the builder chose for this interview, pulls evidence, and grades
-// each question. Server-only.
+// Converts a completed interview transcript into normalized feedback.
 import type { Interview } from "@/components/talkt/data";
 import { chatJSON, type ChatMessage } from "@/lib/llm";
 
@@ -114,11 +111,10 @@ export async function analyzeTranscript(interview: Interview, transcript: string
       .join("\n"),
   };
 
-  // Lower temperature + a token cap keep the completion tight and fast — the
-  // output size (a critique + model answer per question) is what drives latency.
+  // Keep the response bounded; per-question feedback dominates token volume.
   const raw = await chatJSON<Record<string, unknown>>([system, user], { temperature: 0.2, maxTokens: 3500 });
 
-  // Normalize: never trust the model to return every key/shape.
+  // Normalize all model output before it reaches storage or the UI.
   const dimScoresRaw = Array.isArray(raw.dimensionScores) ? raw.dimensionScores : [];
   const byKey = new Map<string, { score: number; note: string }>();
   for (const d of dimScoresRaw) {

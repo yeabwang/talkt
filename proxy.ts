@@ -1,7 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 
-// Public routes are derived from the existing Clerk env vars (sign-in /
-// sign-up). Everything else is protected by default — protected-first.
+// Keep auth pages public; protect every other route by default.
 const signInUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL ?? '/sign-in'
 const signUpUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL ?? '/sign-up'
 

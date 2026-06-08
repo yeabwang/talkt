@@ -3,20 +3,17 @@
 @import "shadcn/tailwind.css";
 @import "@clerk/ui/themes/shadcn.css";
 
-/* TalkT design system. Monochrome, dark-first, editorial.
-   Dark is the default (html carries `.dark`); light is the toggle.
-   Components inherit via the shadcn semantic vars below — do not
-   hardcode hex in components; reference these tokens. */
+/* TalkT design tokens. Components should consume these variables instead of hardcoding colors. */
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  /* Geist, self-hosted via the `geist` package (no build-time network); system fallbacks. */
+  /* Font stacks */
   --font-sans: var(--font-geist-sans), "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --font-heading: var(--font-sans);
 
-  /* shadcn semantic surface/text */
+  /* shadcn semantic colors */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -36,7 +33,7 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  /* TalkT extra tokens */
+  /* Product colors */
   --color-surface: var(--card);
   --color-surface-2: var(--surface-2);
   --color-surface-hover: var(--surface-hover);
@@ -66,7 +63,7 @@
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
 
-  /* Radius — sharp/editorial: everything 0 by default */
+  /* Radius scale */
   --radius-sm: var(--radius);
   --radius-md: var(--radius);
   --radius-lg: var(--radius);
@@ -75,7 +72,7 @@
   --radius-3xl: var(--radius);
 }
 
-/* LIGHT (toggle) */
+/* Light theme */
 :root {
   --radius: 0px;
 
@@ -127,7 +124,7 @@
   --header-h: 56px;
   --nav-w: 240px;
   --container: 1180px;
-  /* Consistent page gutter shared by header + page body */
+  /* Shared page gutter */
   --page-x: 40px;
   --content-max: 1200px;
   --google-blue: #4285f4;
@@ -151,7 +148,7 @@
   --sidebar-ring: #a6a09b;
 }
 
-/* DARK (default) */
+/* Dark theme */
 .dark {
   --background: #09090b;
   --foreground: #fafafa;
@@ -223,7 +220,7 @@
   html {
     @apply font-sans;
   }
-  /* Sharp by default: square buttons + inputs (DS hard rule). */
+  /* Controls are square by default. */
   button,
   input,
   textarea,
@@ -236,7 +233,7 @@
   }
 }
 
-/* ─── Typography helpers ───────────────────────────── */
+/* Typography */
 @layer components {
   .h1-hero {
     font-size: clamp(38px, 4.4vw, 52px);
@@ -285,7 +282,7 @@
   .dimmed {
     color: var(--dimmed);
   }
-  /* UPPERCASE mono section labels / nav / timestamps */
+  /* Section labels, nav labels, and timestamps */
   .mono-label {
     font-family: var(--font-mono);
     font-size: 11px;
@@ -304,7 +301,7 @@
   }
 }
 
-/* ─── Background motifs ────────────────────────────── */
+/* Background utilities */
 @layer utilities {
   .bg-grid-lines {
     background-image: linear-gradient(
@@ -438,7 +435,7 @@
   }
 }
 
-/* ─── Animations ───────────────────────────────────── */
+/* Motion */
 @keyframes marquee {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
@@ -645,7 +642,7 @@ html.anim .stagger > *:nth-child(8) { animation-delay: 420ms; }
   grid-template-columns: var(--nav-w) minmax(0, 1fr);
 }
 
-/* Sidebar nav — sectioned, no box; active reads as a left accent */
+/* Sidebar navigation */
 .tt-nav-label {
   padding: 0 10px;
   margin: 18px 0 7px;
@@ -687,8 +684,7 @@ html.anim .stagger > *:nth-child(8) { animation-delay: 420ms; }
   display: grid;
   grid-template-columns: 1.5fr 1fr;
 }
-/* Overall-score card: compact score column so the ring sits beside the
-   summary instead of floating far left in a wide column. */
+/* Keep the results score ring close to its summary copy. */
 .talkt-results-overall {
   grid-template-columns: 220px minmax(0, 1fr);
 }
@@ -737,8 +733,7 @@ html.anim .stagger > *:nth-child(8) { animation-delay: 420ms; }
   background: var(--border);
   border: 1px solid var(--border);
 }
-/* Filter panel — a collapsible right sidebar that mirrors the main nav and
-   floats over content so the cards keep their width. */
+/* Collapsible filter panel overlays content without resizing cards. */
 .talkt-filter-panel {
   position: fixed;
   top: var(--header-h);
@@ -839,7 +834,7 @@ html.anim .stagger > *:nth-child(8) { animation-delay: 420ms; }
   }
 }
 
-/* Loading skeleton shimmer (see components/talkt/skeletons.tsx). */
+/* Loading skeleton shimmer. */
 .talkt-skeleton {
   position: relative;
   overflow: hidden;

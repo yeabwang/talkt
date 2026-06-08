@@ -117,7 +117,7 @@ function mergePathParams(next: AppPathState, current: Record<string, unknown>): 
   return next.params;
 }
 
-// Minimal shape we read off the Clerk user resource.
+// Minimal Clerk user shape consumed by this shell.
 interface ClerkUserLike {
   id: string;
   fullName: string | null;
@@ -156,7 +156,7 @@ function writeCachedUser(id: string, user: AppUser) {
   try {
     window.sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify({ id, user }));
   } catch {
-    /* sessionStorage unavailable (private mode / quota) — degrade silently */
+    /* Session cache is best-effort. */
   }
 }
 
@@ -177,20 +177,16 @@ export function TalkTApp() {
   const [theme, setTheme] = React.useState<Theme>("dark");
   const [route, setRoute] = React.useState<TalkTRoute>(pathState.route);
   const [params, setParams] = React.useState<Record<string, unknown>>(pathState.params);
-  // Custom interviews the user builds this session but hasn't published yet.
+  // Session-local interviews are merged with the public directory.
   const [sessionInterviews, setSessionInterviews] = React.useState<Interview[]>([]);
-  // The live, ranked directory from the API (the only source of templates now).
   const [directory, setDirectory] = React.useState<Interview[]>([]);
   const [recommended, setRecommended] = React.useState<Interview[]>([]);
-  // The user's graded attempt history from the DB (Reports + dashboard).
   const [attempts, setAttempts] = React.useState<Attempt[]>([]);
-  // Load status so screens show skeletons (not empty states) until the first
-  // fetch settles.
+  // Load status gates skeletons versus empty states.
   const [directoryStatus, setDirectoryStatus] = React.useState<Loadable<true>>(idle());
   const [attemptsStatus, setAttemptsStatus] = React.useState<Loadable<true>>(idle());
 
-  // Profile (name + photo) comes from Clerk once loaded. A cached copy is only a
-  // pre-Clerk fallback; delay reading it so hydration still starts from null.
+  // Cached profile is only a pre-Clerk fallback after client mount.
   const [cachedUser, setCachedUser] = React.useState<AppUser | null>(null);
   const clerkAppUser = React.useMemo(() => {
     if (!isLoaded || !clerkUser) return null;
@@ -198,8 +194,7 @@ export function TalkTApp() {
   }, [isLoaded, clerkUser]);
   const user = isLoaded ? clerkAppUser : cachedUser;
 
-  // Fast first paint: hydrate from the session cache after mount (client only,
-  // so it never diverges from the server's null render).
+  // Hydrate the session cache after mount to avoid server/client divergence.
   React.useEffect(() => {
     const timer = window.setTimeout(() => {
       const cached = readCachedUser();
@@ -238,15 +233,13 @@ export function TalkTApp() {
     return () => cancelAnimationFrame(frame);
   }, []);
 
-  // Load the live directory + personalized order once the user is resolved.
+  // Load the directory once Clerk resolves the user.
   React.useEffect(() => {
     if (!isLoaded || !clerkUser) return;
     let cancelled = false;
     void (async () => {
       setDirectoryStatus(loading());
-      // Recommended already returns the full directory, re-ranked for this user.
-      // Use it as the primary source; only fall back to the plain directory when
-      // it fails or is empty — avoiding a second full directory read.
+      // Preferred order is personalized; fallback is the plain ranked directory.
       try {
         const rec = await fetchRecommended();
         if (!cancelled && rec.length) {
@@ -262,7 +255,7 @@ export function TalkTApp() {
         const dir = await fetchDirectory();
         if (!cancelled) setDirectory(dir);
       } catch {
-        /* DB unreachable — directory stays empty */
+        /* Directory stays empty when the DB is unavailable. */
       }
       if (!cancelled) setDirectoryStatus(loaded(true));
     })();
@@ -271,8 +264,7 @@ export function TalkTApp() {
     };
   }, [isLoaded, clerkUser]);
 
-  // Load the user's graded history whenever they land on a screen that shows it
-  // (refetches after a just-finished grade once they navigate back).
+  // Refresh graded history when a visible screen needs it.
   React.useEffect(() => {
     if (!isLoaded || !clerkUser) return;
     if (route !== "dashboard" && route !== "reports") return;
@@ -283,7 +275,7 @@ export function TalkTApp() {
         const list = await fetchAttempts();
         if (!cancelled) setAttempts(list);
       } catch {
-        /* DB unreachable — history stays empty */
+        /* History stays empty when the DB is unavailable. */
       }
       if (!cancelled) setAttemptsStatus(loaded(true));
     })();
@@ -292,8 +284,7 @@ export function TalkTApp() {
     };
   }, [isLoaded, clerkUser, route]);
 
-  // Recommendations re-rank the directory (suitable interviews float to the top)
-  // — not a separate section. Fall back to plain rank order until they load.
+  // Merge personalized directory results with session-local custom interviews.
   const allInterviews = React.useMemo(() => {
     const base = recommended.length ? recommended : directory;
     const ids = new Set(base.map((interview) => interview.id));
@@ -335,18 +326,14 @@ export function TalkTApp() {
     navigate("lobby", { interview });
   };
 
-  // "/" is protected by proxy.ts, so a reaching user is authenticated. A cached
-  // profile lets us paint immediately; otherwise wait for Clerk to resolve.
+  // Wait for Clerk or the client-only cached profile before rendering the shell.
   if (!user) return null;
 
   const paramInterview = params.interview as Interview | undefined;
   const paramInterviewId = params.interviewId as string | undefined;
   const interview = paramInterview ?? findInterview(paramInterviewId);
 
-  // Lobby/live need a concrete interview. On a direct URL nav the directory may
-  // still be loading (allInterviews empty), so `active` is briefly undefined —
-  // render a loader instead of crashing on `interview.title`. If the directory
-  // has loaded and nothing resolves, show a not-found with a way back.
+  // Direct lobby/live URLs may resolve before the directory finishes loading.
   if (route === "lobby" || route === "live") {
     const active = interview ?? allInterviews[0];
     if (!active) {
@@ -385,7 +372,7 @@ export function TalkTApp() {
     const active = interview ?? allInterviews[0];
     const session = params.session as CallSession | undefined;
     const camStream = (params.camStream as MediaStream | null | undefined) ?? null;
-    // A live route without a session means a stale/direct nav — bounce to the lobby.
+    // Direct live URLs need a fresh lobby join to create the call session.
     if (!session) return <LobbyScreen interview={active} user={user} navigate={navigate} onJoin={(s, cam) => navigate("live", { interview: active, session: s, camStream: cam })} />;
     return (
       <LiveInterviewScreen

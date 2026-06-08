@@ -1,6 +1,5 @@
-// TalkT — Prisma schema
-// Relational metadata + structured feedback. Bulky artifacts (transcripts,
-// raw DeepSeek output) live in Vercel Blob; only blob URLs are stored here.
+// TalkT relational metadata and structured feedback.
+// Large artifacts live outside Postgres; only blob URLs are stored here.
 
 generator client {
   provider = "prisma-client"
@@ -26,52 +25,52 @@ enum AttemptStatus {
   analyzing
   ready
   failed
-  // Candidate ended the call mid-interview — never graded, hidden from history.
+  // Candidate left before a scoreable interview completed.
   abandoned
 }
 
-// Thin profile row keyed by Clerk user id.
+// Profile row keyed by Clerk user id.
 model User {
-  id        String   @id // Clerk user id
+  id        String   @id
   email     String?  @unique
   name      String?
   createdAt DateTime @default(now())
 
-  interviews Interview[] // custom interviews this user owns
+  interviews Interview[]
   attempts   Attempt[]
   votes      Vote[]
 }
 
 model Interview {
   id          String        @id @default(cuid())
-  ownerId     String? // null = system template
+  ownerId     String?
   owner       User?         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   title       String
-  subtitle    String? // short tagline under the title
+  subtitle    String?
   role        String?
-  topic       String? // used as the directory "category" facet
+  topic       String?
   difficulty  String?
-  blurb       String? // one-line description shown on the card/detail
-  minutes     Int? // estimated spoken duration
-  focus       String[]      @default([]) // themes the interview leans on
+  blurb       String?
+  minutes     Int?
+  focus       String[]      @default([])
   type        InterviewType @default(custom)
   visibility  Visibility    @default(private)
-  language    String        @default("en") // ISO 639-1; controls question gen, interviewer voice, report
-  dimensions  Json          @default("[]") // 4 core scoring dims LLM picks per role: [{ key, label, weight? }]
-  questions   Json // ordered Question[]: { id, text, idealAnswerHint? }
-  voiceConfig Json? // { voiceId } — language promoted to its own column
+  language    String        @default("en")
+  dimensions  Json          @default("[]")
+  questions   Json
+  voiceConfig Json?
 
-  // Publishing + attribution (a custom interview becomes a public template).
-  publishedAt DateTime? // when the owner published it public; null = never published
-  authorName  String? // snapshot display-name credit shown on card/detail; null when anonymous
-  anonymous   Boolean   @default(false) // published without attribution (carries a ranking down-weight)
+  // Publishing and attribution for custom interviews promoted to the directory.
+  publishedAt DateTime?
+  authorName  String?
+  anonymous   Boolean   @default(false)
 
-  // Reddit-style voting tallies (denormalized for transparent counts + sorted reads).
+  // Up/down vote tallies are denormalized for fast sorted directory reads.
   upvotes   Int   @default(0)
   downvotes Int   @default(0)
-  rankScore Float @default(0) // Wilson lower bound with anonymity down-weight baked in
+  rankScore Float @default(0)
 
-  // Auto-takedown: heavily downvoted templates are hidden and flagged for admin review.
+  // Heavily downvoted templates are hidden and flagged for review.
   flagged   Boolean   @default(false)
   flaggedAt DateTime?
 
@@ -82,22 +81,22 @@ model Interview {
 
   @@index([ownerId])
   @@index([type, visibility])
-  // Directory reads: filter out flagged/private, order by rankScore.
+  // Directory reads filter visibility/flags and sort by rank.
   @@index([flagged, visibility, type, rankScore])
 }
 
-// One up/down vote per user per interview. Reddit-style; toggleable/clearable.
+// One up/down vote per user per interview; votes are toggleable and clearable.
 model Vote {
   id          String    @id @default(cuid())
   userId      String
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   interviewId String
   interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
-  value       Int // 1 = up, -1 = down
+  value       Int
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  @@unique([userId, interviewId]) // enforces one vote per user per interview
+  @@unique([userId, interviewId])
   @@index([interviewId])
 }
 
@@ -108,8 +107,7 @@ model Attempt {
   interviewId       String
   interview         Interview     @relation(fields: [interviewId], references: [id], onDelete: Cascade)
   status            AttemptStatus @default(in_progress)
-  // Vapi call id (correlation / defensive secondary key) and the ephemeral
-  // assistant id (deleted by the end-of-call webhook).
+  // Correlates Vapi callbacks to attempts; assistants are ephemeral.
   vapiCallId        String?       @unique
   vapiAssistantId   String?
   startedAt         DateTime      @default(now())
@@ -119,21 +117,18 @@ model Attempt {
   feedback Feedback?
 
   @@index([interviewId])
-  // History list: userId + status filter, startedAt sort (listUserAttempts).
+  // Graded history reads.
   @@index([userId, status, startedAt])
-  // Recommendation facets: userId filter, startedAt sort (listAttemptFacets).
+  // Recommendation profile reads.
   @@index([userId, startedAt])
 }
 
-// The pool of interviewer personas surfaced in the UI. The spoken Vapi TTS voice
-// is resolved in code from a per-language catalog (lib/vapi/voices.ts), so this
-// row is a pure persona record (key/name/tone) — no provider, no voice id to
-// swap, no availability to poll.
+// Interviewer personas shown in the UI; Vapi voices resolve through lib/vapi/voices.ts.
 model VoiceAgent {
-  key       String   @id // stable persona key surfaced in the UI: adi/ren/kai/mira
+  key       String   @id
   name      String
   tone      String
-  language  String   @default("en") // ISO 639-1 the voice is tuned for
+  language  String   @default("en")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -144,10 +139,10 @@ model Feedback {
   attempt         Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   overallScore    Float
   summary         String   @default("")
-  dimensionScores Json // keyed to Interview.dimensions: { [dimKey]: { score, note } }
+  dimensionScores Json
   strengths       String[]
   improvements    String[]
-  perQuestion     Json // [{ questionId, ratingScore, modelAnswer, critique }]
+  perQuestion     Json
   rawBlobUrl      String?
   createdAt       DateTime @default(now())
 }

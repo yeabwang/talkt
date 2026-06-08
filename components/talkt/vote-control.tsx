@@ -11,13 +11,7 @@ interface VoteState {
 }
 
 /**
- * Reddit-style up/down vote control with transparent counts. Optimistically
- * updates on click (flips immediately), posts to /api/interviews/[id]/vote, and
- * reverts on failure. Active up turns green, active down turns red. Disabled for
- * interviews the caller owns (the API rejects self-votes anyway).
- *
- * Mounted per interview (cards/detail are keyed by id), so it seeds from props
- * once and does not re-sync afterwards.
+ * Up/down vote control with optimistic counts and failure rollback.
  */
 export function VoteControl({
   interviewId,
@@ -49,9 +43,7 @@ export function VoteControl({
       const prev = state;
       const nextVote: -1 | 0 | 1 = prev.myVote === direction ? 0 : direction;
 
-      // Optimistic: shift tallies by the delta between the old and new vote.
-      // Clamp at 0 — if the seeded myVote/count ever desync (e.g. a prior vote
-      // POST failed mid-flight), clearing a vote must not render a negative count.
+      // Shift tallies by vote delta and clamp against stale seeded counts.
       const next: VoteState = {
         upvotes: Math.max(0, prev.upvotes - (prev.myVote === 1 ? 1 : 0) + (nextVote === 1 ? 1 : 0)),
         downvotes: Math.max(0, prev.downvotes - (prev.myVote === -1 ? 1 : 0) + (nextVote === -1 ? 1 : 0)),
@@ -70,7 +62,7 @@ export function VoteControl({
         const data = (await res.json()) as VoteState;
         setState({ upvotes: data.upvotes, downvotes: data.downvotes, myVote: data.myVote });
       } catch {
-        setState(prev); // revert
+        setState(prev);
       } finally {
         setPending(false);
       }

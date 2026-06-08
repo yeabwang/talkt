@@ -1,6 +1,4 @@
-// Boundary-validator tests for lib/validate.ts. These guard the API input seam:
-// malformed bodies must be rejected (ValidationError -> 400) before reaching the
-// DB layer, and accepted values must be trimmed and length-capped.
+// Boundary-validator tests for lib/validate.ts.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 

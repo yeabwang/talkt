@@ -1,6 +1,4 @@
-// A tiny, framework-free load-status union so screens can distinguish
-// "still loading" from "loaded but empty" — the distinction that prevents
-// misleading empty-state flashes.
+// Load state helpers that distinguish pending requests from loaded empty data.
 
 export type Loadable<T> =
   | { status: "idle" }
@@ -13,12 +11,12 @@ export const loading = <T>(): Loadable<T> => ({ status: "loading" });
 export const loaded = <T>(data: T): Loadable<T> => ({ status: "loaded", data });
 export const failed = <T>(error: string): Loadable<T> => ({ status: "failed", error });
 
-/** True once a request has settled (loaded or failed) — safe to show empty/error UI. */
+/** True once a request has settled. */
 export function isResolved<T>(s: Loadable<T>): boolean {
   return s.status === "loaded" || s.status === "failed";
 }
 
-/** True while a request is still outstanding (idle or loading) — show a skeleton. */
+/** True while a request is still outstanding. */
 export function isPending<T>(s: Loadable<T>): boolean {
   return !isResolved(s);
 }

@@ -1,7 +1,4 @@
-// Pure grading-decision logic shared by the Vapi end-of-call webhook (POST
-// /api/vapi/webhook). Kept free of Prisma / the Trigger SDK so it is unit-testable
-// with fakes; the route wires the real DB + Trigger client into these seams.
-// (Header verification + report→body mapping live in lib/vapi/webhook.ts.)
+// Grading decision logic shared by the Vapi webhook route and tests.
 import type { Turn } from "@/lib/transcript";
 
 export type Outcome = "completed" | "abandoned";
@@ -12,8 +9,7 @@ export interface SessionEndedBody {
   outcome: Outcome;
 }
 
-// Injectable dependencies so the decision logic can be tested with fakes for the
-// DB and the Trigger client (no Prisma / Trigger import in the test path).
+// Injectable dependencies keep the core decision path unit-testable.
 export interface SessionEndedDeps {
   findAttempt: (attemptId: string) => Promise<{ id: string; status: string } | null>;
   markAbandoned: (attemptId: string) => Promise<void>;
@@ -25,9 +21,7 @@ export interface SessionEndedDeps {
 export type SessionEndedResult = "noop" | "abandoned" | "graded";
 
 /**
- * Core decision, free of HTTP/auth: resolve the attempt, no-op on unknown or
- * non-`in_progress` (already handled — idempotent), mark abandoned, or trigger
- * grading exactly once with the per-attempt idempotency key.
+ * Resolve the attempt, mark abandoned when appropriate, or trigger grading once.
  */
 export async function processSessionEnded(body: SessionEndedBody, deps: SessionEndedDeps): Promise<SessionEndedResult> {
   const attempt = await deps.findAttempt(body.attemptId);

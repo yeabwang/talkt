@@ -8,7 +8,7 @@ import { SectionHeader } from "@/components/talkt/primitives";
 const PERIODS = ["7d", "30d", "90d", "All"] as const;
 type Period = (typeof PERIODS)[number];
 
-// Minutes, tokens, cost and per-interview breakdown for the current plan.
+// Usage summary for the current plan.
 export function UsageScreen() {
   const [period, setPeriod] = React.useState<Period>("30d");
   const usage = USAGE;

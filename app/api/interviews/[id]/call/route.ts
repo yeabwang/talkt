@@ -1,10 +1,4 @@
-// POST /api/interviews/[id]/call — begin a call.
-// Resolves the interviewer persona, opens an Attempt row, builds the full
-// assistant config in code, and creates an EPHEMERAL Vapi assistant server-side
-// (private key). Only the assistant id + public key reach the browser, so the
-// system prompt and interview questions never leave the server. The browser
-// (@vapi-ai/web) starts the call with the assistant id; Vapi runs the pipeline
-// and POSTs the transcript back to /api/vapi/webhook.
+// POST /api/interviews/[id]/call: open an attempt and create an ephemeral Vapi assistant.
 import { auth, currentUser } from "@clerk/nextjs/server";
 import type { NextRequest } from "next/server";
 
@@ -19,8 +13,7 @@ import { buildVapiAssistant } from "@/lib/vapi/assistant";
 import { buildInterviewJob } from "@/lib/vapi/job";
 import { createAssistant, deleteAssistant } from "@/lib/vapi/server";
 
-// Starting a call creates an ephemeral assistant + opens an Attempt row. 10/min/user
-// is well above real use and blocks rapid-fire abuse.
+// Cost and abuse guard for assistant creation.
 const callLimiter = createRateLimiter({ limit: 10, windowMs: 60_000 });
 
 function isLocalUrl(value: string): boolean {

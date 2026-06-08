@@ -5,15 +5,11 @@ export default defineConfig({
   project: "proj_wtrpaehegopjykiaewbc",
   runtime: "node",
   logLevel: "log",
-  // Prisma 7 (prisma-client provider + @prisma/adapter-pg): modern mode marks
-  // @prisma/client external and relies on our own `prisma generate` (postinstall)
-  // for the TS client. No-op in dev, which reuses the locally generated client.
+  // Keep Prisma generation under our postinstall flow; Trigger bundles the client as external code.
   build: {
     extensions: [prismaExtension({ mode: "modern" })],
   },
-  // The max compute seconds a task is allowed to run. If the task run exceeds this duration, it will be stopped.
-  // You can override this on an individual task.
-  // See https://trigger.dev/docs/runs/max-duration
+  // Upper bound for long-running background work; individual tasks can set a lower value.
   maxDuration: 3600,
   retries: {
     enabledInDev: true,

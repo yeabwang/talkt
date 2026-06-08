@@ -1,13 +1,5 @@
-// Pure, content-based recommendation scoring for the template directory.
-//
-// We profile a user from their interview *attempt* history along four facets —
-// category, role, difficulty, language — with exponential time decay so recent
-// activity counts more (a "preference timeline"). Each candidate interview gets
-// an affinity in [0,1] from how well it matches that profile, then we blend
-// affinity with the template's directory rank. No other users' data is used, so
-// there is no cold-start cliff and nothing leaks across accounts.
-//
-// No DB or framework deps — unit-tested with crafted literals.
+// Content-based recommendation scoring for the template directory.
+// Uses only the current user's attempt history plus public directory rank.
 
 /** Facets we profile on. Each contributes equally to affinity. */
 export type Facet = "category" | "role" | "difficulty" | "language";
@@ -88,7 +80,7 @@ export function buildProfile(
   return profile;
 }
 
-/** True when the profile has no signal (no attempts) — recommend falls back to pure rank. */
+/** True when the profile has no signal. */
 export function isColdStart(profile: Profile): boolean {
   return FACETS.every((facet) => Object.keys(profile[facet]).length === 0);
 }

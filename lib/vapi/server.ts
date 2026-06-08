@@ -1,7 +1,6 @@
 import "server-only";
 
-// Server-only Vapi client. Holds VAPI_PRIVATE_KEY — never import from a client
-// component. Creates and deletes the ephemeral per-attempt assistant.
+// Server-only Vapi client for ephemeral per-attempt assistants.
 import { VapiClient } from "@vapi-ai/server-sdk";
 
 import type { AssistantPayload } from "@/lib/vapi/assistant";
@@ -39,8 +38,7 @@ async function vapiJson(path: string): Promise<unknown> {
   return await res.json();
 }
 
-/** List web/phone calls for one assistant, newest first. Used to repair missed
- * local-dev webhooks and rare callback delivery failures. */
+/** List recent calls for one assistant. Used to repair missed callback delivery. */
 export async function listCallsForAssistant(assistantId: string): Promise<VapiCallRecord[]> {
   const data = await vapiJson(`/call?assistantId=${encodeURIComponent(assistantId)}&limit=5`);
   return Array.isArray(data) ? (data as VapiCallRecord[]) : [];
@@ -48,15 +46,14 @@ export async function listCallsForAssistant(assistantId: string): Promise<VapiCa
 
 /** Create the ephemeral assistant; returns its id. */
 export async function createAssistant(payload: AssistantPayload): Promise<string> {
-  // The SDK's create type is a broad union; our payload is a precise subset.
+  // The SDK type is broad; the payload builder returns the subset we use.
   const created = await getClient().assistants.create(payload as never);
   if (!created?.id) throw new Error("Vapi assistant creation returned no id.");
   return created.id;
 }
 
-/** Best-effort delete of the ephemeral assistant (called from the webhook). */
+/** Best-effort cleanup of an ephemeral assistant. */
 export async function deleteAssistant(assistantId: string): Promise<void> {
-  // NOTE: SDK's assistants.delete() takes { id: string }, not a plain string.
   try {
     await getClient().assistants.delete({ id: assistantId });
   } catch (err) {

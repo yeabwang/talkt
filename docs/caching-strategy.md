@@ -44,17 +44,26 @@ cached entry cannot leak one user's votes to another.
 
 ## Invalidation rules
 
-`revalidateDirectory()` (→ `revalidateTag("directory", "max")`) is called after
-mutations that change directory contents or order:
+`revalidateDirectory()` (→ `revalidateTag("directory", DIRECTORY_REVALIDATE_PROFILE)`,
+where the profile is `{ expire: 0 }`) is called after mutations that change
+directory contents or order:
 
 - **Vote** — `castVote` in `lib/db/votes.ts`, after the transaction succeeds.
   A vote re-ranks and can auto-flag, changing directory order/contents.
 - **Publish** — `publish` in `lib/db/interviews.ts`, after the update. A newly
   public interview enters the directory.
 
-The two-arg `revalidateTag(tag, "max")` form is used deliberately:
-single-arg `revalidateTag` is deprecated in Next 16 (AGENTS.md deprecation
-notice). `"max"` gives stale-while-revalidate on the next directory visit.
+**Why `{ expire: 0 }` and not `"max"`:** these mutations run in a Route Handler
+and are **read-your-own-writes** — the mutating user must see their change on the
+*next* directory read. Per the bundled Next 16 docs (`revalidateTag.md`),
+`profile="max"` is *stale-while-revalidate*: it serves the **stale** cached list
+first and refreshes only in the background, so a freshly published template did
+**not** appear on the immediate next load (it surfaced only on a later visit).
+`updateTag()` gives the desired immediate read-your-own-writes semantics but is
+**Server-Action-only** and cannot be called from a Route Handler; the documented
+Route Handler equivalent is `revalidateTag(tag, { expire: 0 })`, which expires the
+entry immediately so the next read is a fresh cache miss. Single-arg
+`revalidateTag(tag)` remains deprecated in Next 16 (AGENTS.md notice).
 
 **Not invalidated:** creating a **private** custom interview
 (`createFromBuilder`) — it is not in the public directory, so the cache is
