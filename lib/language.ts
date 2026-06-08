@@ -1,29 +1,4 @@
-// Converts between stored ISO language codes and UI display labels.
-
-const LABEL_BY_CODE: Record<string, string> = {
-  en: "English",
-  es: "Spanish",
-  fr: "French",
-  de: "German",
-  pt: "Portuguese",
-  zh: "Mandarin",
-  hi: "Hindi",
-  ar: "Arabic",
-  ja: "Japanese",
-};
-
-const CODE_BY_LABEL: Record<string, string> = Object.fromEntries(
-  Object.entries(LABEL_BY_CODE).map(([code, label]) => [label.toLowerCase(), code]),
-);
-
-/** ISO code -> display label. Unknown/blank codes fall back to English. */
-export function toLanguageLabel(code: string | null | undefined): string {
-  if (!code) return "English";
-  return LABEL_BY_CODE[code.trim().toLowerCase()] ?? "English";
-}
-
-/** Display label -> ISO code. Unknown/blank labels fall back to "en". */
-export function toLanguageCode(label: string | null | undefined): string {
-  if (!label) return "en";
-  return CODE_BY_LABEL[label.trim().toLowerCase()] ?? "en";
-}
+// Language helpers. The catalog (lib/catalog.ts) is the single source of truth
+// for the language set and its labels; this module just re-exports the boundary
+// converters so existing `@/lib/language` imports keep working.
+export { toLanguageLabel, toLanguageCode } from "@/lib/catalog";

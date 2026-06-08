@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import type { NextRequest } from "next/server";
 
 import { badRequest, jsonError, tooManyRequests, unauthorized } from "@/lib/api";
+import { CATEGORIES } from "@/lib/catalog";
 import { chatJSON, type ChatMessage } from "@/lib/llm";
 import { createRateLimiter } from "@/lib/rate-limit";
 
@@ -56,7 +57,7 @@ You MUST reply with a single strict JSON object and NOTHING else, matching exact
   "summary": {                                   // best-known draft so far; use "" / 0 / [] for unknowns
     "title": string,                             // a concise interview title
     "role": string,
-    "category": string,                          // e.g. Engineering, Product, Healthcare, Business, Design, General
+    "category": string,                          // one of: ${CATEGORIES.join(", ")}
     "difficulty": string,                        // e.g. Entry level, Mid, Senior, All levels
     "blurb": string,                             // ONE concise sentence describing what this interview practices (shown on its card)
     "focus": string[],                           // themes the interview leans on
@@ -146,7 +147,7 @@ function normalizeTurn(raw: Partial<BuilderTurn>): BuilderTurn {
     summary: {
       title: str(summaryIn.title),
       role: str(summaryIn.role),
-      category: str(summaryIn.category),
+      category: category(summaryIn.category),
       difficulty: str(summaryIn.difficulty),
       blurb: str(summaryIn.blurb),
       focus: strList(summaryIn.focus).slice(0, 6),
@@ -168,6 +169,15 @@ const DEFAULT_DIMENSIONS: BuilderDimension[] = [
 
 function str(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+// Clamp the model's category to the catalog. A non-empty value outside CATEGORIES
+// falls back to "General"; "" passes through so the summary doesn't show a
+// category before one is actually settled (pre-ready turns).
+function category(value: unknown): string {
+  const c = str(value);
+  if (!c) return "";
+  return CATEGORIES.includes(c) ? c : "General";
 }
 
 function strList(value: unknown): string[] {

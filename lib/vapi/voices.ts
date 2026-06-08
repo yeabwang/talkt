@@ -1,12 +1,24 @@
-// Resolves TalkT personas to Vapi voices, with optional language overrides.
+// Persona → Vapi voice resolution: the server-side *realization* of a persona as
+// a concrete TTS voice id, with optional per-language overrides. Persona keys and
+// language availability are the catalog's job (lib/catalog.ts); this maps each to
+// an actual voice. Override the whole catalog at deploy time with
+// VAPI_VOICE_CATALOG (JSON).
 import { z } from "zod";
 
+import { DEFAULT_PERSONA } from "@/lib/catalog";
+
 export interface VapiVoice {
-  provider: string;
+  provider: string; // "cartesia" | "11labs" | "inworld" | ...
   voiceId: string;
+  // Cartesia is one multilingual voice driven by a language param + model; we set
+  // both so the voice actually speaks the interview language. Native per-language
+  // overrides (Inworld/ElevenLabs) are already the right language, so they omit these.
+  model?: string;
+  language?: string;
 }
 
-const DEFAULT_PERSONA = "adi";
+// Cartesia model that covers our full offered language set (sonic-3 = 40+ langs).
+const CARTESIA_MULTILINGUAL_MODEL = "sonic-3";
 
 const voiceSchema = z.object({ provider: z.string().min(1), voiceId: z.string().min(1) }).strict();
 const catalogSchema = z
@@ -19,7 +31,7 @@ const catalogSchema = z
 
 type VoiceCatalog = z.infer<typeof catalogSchema>;
 
-// Default voice catalog.
+// Default catalog. Cartesia voice UUIDs carried over from the LiveKit config.
 const DEFAULT_CATALOG: VoiceCatalog = {
   defaultPersona: DEFAULT_PERSONA,
   personas: {
@@ -56,7 +68,17 @@ function languageKeys(code: string): string[] {
   return norm === base ? [norm] : [norm, base];
 }
 
-/** Resolve a persona and language to a configured Vapi voice. */
+// Attach the spoken language to a Cartesia voice (one multilingual voice, driven
+// by the language param). Native per-language override voices already render the
+// right language, so they pass through untouched.
+function decorate(voice: VapiVoice, baseCode: string): VapiVoice {
+  if (voice.provider !== "cartesia") return voice;
+  return { ...voice, model: voice.model ?? CARTESIA_MULTILINGUAL_MODEL, language: baseCode };
+}
+
+/** Resolve a persona + language to a Vapi voice. A native per-language override
+ * wins; otherwise the persona's Cartesia voice speaks the requested language.
+ * Falls back to the default persona, then throws on total misconfiguration. */
 export function resolveVapiVoice(
   persona: string,
   languageCode: string,
@@ -64,13 +86,14 @@ export function resolveVapiVoice(
 ): VapiVoice {
   const catalog = parseCatalog(env);
   const key = personaKey(persona);
+  const baseCode = languageKeys(languageCode).at(-1) ?? "en";
 
   for (const lang of languageKeys(languageCode)) {
     const v = catalog.languages?.[lang]?.[key];
-    if (v) return v;
+    if (v) return decorate(v, baseCode);
   }
   const fallbackPersona = personaKey(catalog.defaultPersona ?? DEFAULT_PERSONA);
   const voice = catalog.personas[key] ?? catalog.personas[fallbackPersona];
   if (!voice) throw new Error(`No Vapi voice configured for persona "${persona}".`);
-  return voice;
+  return decorate(voice, baseCode);
 }

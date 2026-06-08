@@ -1,11 +1,13 @@
-// Pure parsing and verification helpers for Vapi end-of-call reports.
+// Pure logic for the Vapi end-of-call-report webhook. Kept free of Prisma / the
+// Trigger SDK / network so it is unit-testable; the route wires the real deps.
 import { timingSafeEqual } from "node:crypto";
 
-import { sanitizeTranscript, type Turn } from "@/lib/transcript";
+import { answeredAtLeastHalf, sanitizeTranscript, type Turn } from "@/lib/transcript";
 
 export type Outcome = "completed" | "abandoned";
 
-// Setup and pipeline failures are treated as abandoned attempts.
+// Reasons that mean setup/pipeline failed before a real interview happened — no
+// usable transcript, so never gradable regardless of answered ratio.
 const ABANDON_REASONS = new Set<string>([
   "customer-did-not-answer",
   "customer-did-not-give-microphone-permission",
@@ -28,7 +30,9 @@ function bearerToken(authorization: string | null): string | null {
   return scheme?.toLowerCase() === "bearer" && token ? token : null;
 }
 
-/** Verify the legacy X-Vapi-Secret header. Allows missing secrets only outside production. */
+/** Constant-time compare of the legacy X-Vapi-Secret header against our shared
+ * secret. Mirrors the worker-callback posture: with a secret set, the header
+ * must match (else reject); without one, allow in dev only. */
 export function verifyVapiSecret(provided: string | null, secret: string | undefined, isProd: boolean): "ok" | 401 | 503 {
   if (secret) {
     return safeSecretMatch(provided, secret) ? "ok" : 401;
@@ -50,7 +54,7 @@ export function verifyVapiRequest(
 interface ReportMessage {
   role?: unknown;
   content?: unknown;
-  message?: unknown;
+  message?: unknown; // some payloads use `message` instead of `content`
   transcript?: unknown;
 }
 
@@ -58,7 +62,9 @@ export interface ParsedReport {
   attemptId: string | null;
   assistantId: string | null;
   transcript: Turn[];
-  outcome: Outcome;
+  // Raw Vapi end reason; the outcome is decided by the caller via classifyOutcome,
+  // which needs the interview's question set (not available at parse time).
+  endedReason: string | undefined;
 }
 
 function turnsFromMessages(messages: unknown): Turn[] {
@@ -67,7 +73,7 @@ function turnsFromMessages(messages: unknown): Turn[] {
     .map((m): { role: string; text: string } | null => {
       const rec = m as ReportMessage;
       const role = rec.role === "user" ? "user" : rec.role === "assistant" || rec.role === "bot" ? "assistant" : null;
-      if (!role) return null;
+      if (!role) return null; // drop system / tool / function rows
       const text = textFrom(rec.content) || textFrom(rec.message) || textFrom(rec.transcript);
       return { role, text };
     })
@@ -96,21 +102,19 @@ function messagesFromTranscript(transcript: unknown): ReportMessage[] {
     .filter((m): m is ReportMessage => m !== null);
 }
 
-function assistantClosed(transcript: Turn[]): boolean {
-  const lastAssistant = [...transcript].reverse().find((t) => t.role === "assistant")?.text.toLowerCase() ?? "";
-  return /\b(that'?s (everything|the interview complete)|interview is complete|feedback'?s being|feedback is being|report'?s being|report is being|being prepared|prepared now|you'?ll see it in a moment)\b/.test(lastAssistant);
-}
-
-/** Classify whether a call produced a scoreable interview. */
-export function classifyOutcome(transcript: Turn[], endedReason: string | undefined): Outcome {
-  const userTurns = transcript.filter((t) => t.role === "user").length;
-  if (userTurns === 0) return "abandoned";
+/**
+ * Classify the call into completed (grade it) vs abandoned (discard). The call
+ * is graded when at least half the questions were answered — regardless of who
+ * ended it (the interviewer closing or the candidate hanging up). Setup/pipeline
+ * failures with no usable transcript are always abandoned.
+ */
+export function classifyOutcome(transcript: Turn[], questions: string[], endedReason: string | undefined): Outcome {
   if (endedReason && ABANDON_REASONS.has(endedReason)) return "abandoned";
-  if (endedReason === "customer-ended-call" && !assistantClosed(transcript)) return "abandoned";
-  return "completed";
+  return answeredAtLeastHalf(transcript, questions) ? "completed" : "abandoned";
 }
 
-/** Map a Vapi end-of-call report to the internal attempt outcome. */
+/** Map a Vapi `end-of-call-report` message object to attempt id + transcript +
+ * outcome. `msg` is `body.message`. */
 export function mapReport(msg: unknown): ParsedReport {
   const m = (msg ?? {}) as Record<string, unknown>;
   const assistant = (m.assistant ?? {}) as Record<string, unknown>;
@@ -133,10 +137,12 @@ export function mapReport(msg: unknown): ParsedReport {
   const transcript = turnsFromMessages(m.messages ?? artifact.messages ?? artifact.messagesOpenAIFormatted);
   const endedReason = typeof m.endedReason === "string" ? m.endedReason : typeof call.endedReason === "string" ? call.endedReason : undefined;
 
-  return { attemptId, assistantId, transcript, outcome: classifyOutcome(transcript, endedReason) };
+  return { attemptId, assistantId, transcript, endedReason };
 }
 
-/** Map a Vapi call record into the same shape as webhook reports. */
+/** Map a completed Vapi `/call` record into the same shape as an
+ * end-of-call-report. This repairs local development runs where the assistant
+ * server URL points at localhost and Vapi cannot deliver the webhook. */
 export function mapCallRecord(call: unknown, attemptId: string | null): ParsedReport | null {
   const c = (call ?? {}) as Record<string, unknown>;
   const status = typeof c.status === "string" ? c.status : undefined;

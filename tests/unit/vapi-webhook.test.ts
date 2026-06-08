@@ -34,7 +34,7 @@ test("mapReport extracts attemptId from assistant metadata + builds turns", () =
     { role: "assistant", text: "Hi, question one?" },
     { role: "user", text: "Here is my answer." },
   ]);
-  assert.equal(r.outcome, "completed");
+  assert.equal(r.endedReason, "assistant-ended-call");
 });
 
 test("mapReport reads current artifact messages and top-level endedReason", () => {
@@ -56,54 +56,47 @@ test("mapReport reads current artifact messages and top-level endedReason", () =
     { role: "assistant", text: "Q1?" },
     { role: "user", text: "Answer." },
   ]);
-  assert.equal(r.outcome, "completed");
+  assert.equal(r.endedReason, "assistant-ended-call");
 });
 
-test("classifyOutcome: no user turns -> abandoned", () => {
-  assert.equal(classifyOutcome([{ role: "assistant", text: "hi" }], "assistant-ended-call"), "abandoned");
+// Two-question set so "Q1 asked + answered" is exactly 50% (graded) and
+// "no answer" is 0% (abandoned).
+const TWO_Q = ["Tell me about caching.", "How do you scale a service?"];
+
+test("classifyOutcome: no candidate answers -> abandoned", () => {
+  assert.equal(classifyOutcome([{ role: "assistant", text: "hi" }], TWO_Q, "assistant-ended-call"), "abandoned");
 });
 
-test("classifyOutcome: early customer hangup -> abandoned even with answers", () => {
+test("classifyOutcome: setup-failure reason -> abandoned", () => {
+  const t = [{ role: "user" as const, text: "hello?" }];
+  assert.equal(classifyOutcome(t, TWO_Q, "pipeline-error"), "abandoned");
+});
+
+test("classifyOutcome: >=50% answered is graded no matter who ended", () => {
   const t = [
-    { role: "assistant" as const, text: "Q1?" },
-    { role: "user" as const, text: "partial answer" },
+    { role: "assistant" as const, text: "Tell me about caching." },
+    { role: "user" as const, text: "Caches store hot data near compute." },
   ];
-  assert.equal(classifyOutcome(t, "customer-ended-call"), "abandoned");
+  // Interviewer-closed, time cap, silence, AND candidate hangup all grade.
+  assert.equal(classifyOutcome(t, TWO_Q, "assistant-ended-call"), "completed");
+  assert.equal(classifyOutcome(t, TWO_Q, "exceeded-max-duration"), "completed");
+  assert.equal(classifyOutcome(t, TWO_Q, "customer-ended-call"), "completed");
 });
 
-test("classifyOutcome: natural/time/silence end with answers -> completed", () => {
+test("classifyOutcome: <50% answered -> abandoned even if interviewer ended", () => {
+  const fourQ = [...TWO_Q, "Describe a failure.", "What is your strength?"];
   const t = [
-    { role: "assistant" as const, text: "Q1?" },
-    { role: "user" as const, text: "answer" },
+    { role: "assistant" as const, text: "Tell me about caching." },
+    { role: "user" as const, text: "Some answer." },
   ];
-  assert.equal(classifyOutcome(t, "assistant-ended-call"), "completed");
-  assert.equal(classifyOutcome(t, "exceeded-max-duration"), "completed");
-  assert.equal(classifyOutcome(t, "silence-timed-out"), "completed");
-});
-
-test("classifyOutcome: customer hangup after the assistant closes -> completed", () => {
-  const t = [
-    { role: "assistant" as const, text: "Final question?" },
-    { role: "user" as const, text: "Final answer." },
-    { role: "assistant" as const, text: "That's everything from me. Your feedback is being prepared now. Take care." },
-  ];
-  assert.equal(classifyOutcome(t, "customer-ended-call"), "completed");
-});
-
-test("classifyOutcome: report handoff phrase marks a post-close hangup completed", () => {
-  const t = [
-    { role: "assistant" as const, text: "Final question?" },
-    { role: "user" as const, text: "Final answer." },
-    { role: "assistant" as const, text: "That's the interview complete. Your report is being prepared now, and you'll see it in a moment. Take care." },
-  ];
-  assert.equal(classifyOutcome(t, "customer-ended-call"), "completed");
+  assert.equal(classifyOutcome(t, fourQ, "assistant-ended-call"), "abandoned");
 });
 
 test("mapReport falls back to call.assistantId when assistant.id absent", () => {
   const r = mapReport({ call: { assistantId: "as_9" }, messages: [] });
   assert.equal(r.assistantId, "as_9");
   assert.equal(r.attemptId, null);
-  assert.equal(r.outcome, "abandoned");
+  assert.equal(r.transcript.length, 0);
 });
 
 test("mapCallRecord maps an ended Vapi call into a report", () => {
@@ -123,7 +116,7 @@ test("mapCallRecord maps an ended Vapi call into a report", () => {
   assert.ok(r);
   assert.equal(r.attemptId, "att_1");
   assert.equal(r.assistantId, "as_1");
-  assert.equal(r.outcome, "completed");
+  assert.equal(r.endedReason, "assistant-ended-call");
   assert.deepEqual(r.transcript, [
     { role: "assistant", text: "Q1?" },
     { role: "user", text: "Answer." },
@@ -141,7 +134,7 @@ test("mapCallRecord can parse transcript text when structured messages are absen
     "att_1",
   );
   assert.ok(r);
-  assert.equal(r.outcome, "completed");
+  assert.equal(r.endedReason, "assistant-ended-call");
   assert.deepEqual(r.transcript, [
     { role: "assistant", text: "Q1?" },
     { role: "user", text: "Answer." },

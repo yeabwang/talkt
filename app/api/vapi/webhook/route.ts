@@ -1,4 +1,14 @@
-// POST /api/vapi/webhook: end-of-call callback, grading trigger, and assistant cleanup.
+// POST /api/vapi/webhook — Vapi's end-of-call-report callback.
+//
+// Vapi runs the voice pipeline and produces the authoritative transcript. This
+// endpoint maps the report to { attemptId, transcript, outcome }, then reuses the
+// server-driven grading decision (lib/session-ended.ts) — the single grade
+// trigger. It also deletes the ephemeral per-attempt assistant.
+//
+// Idempotent: grading collapses via the `grade-${attemptId}` key and the
+// in_progress guard, so a retry/double-fire is harmless. Auth mirrors the old
+// posture: with VAPI_WEBHOOK_SECRET set, either X-Vapi-Secret or
+// Authorization: Bearer must match; in production a missing secret fails closed.
 import { tasks } from "@trigger.dev/sdk";
 import type { NextRequest } from "next/server";
 
@@ -7,7 +17,7 @@ import { jsonError } from "@/lib/api";
 import { findAttemptForWebhook, markAbandoned, markAnalyzing, markFailed } from "@/lib/db/attempts";
 import { processSessionEnded, type SessionEndedDeps } from "@/lib/session-ended";
 import { deleteAssistant } from "@/lib/vapi/server";
-import { mapReport, verifyVapiRequest } from "@/lib/vapi/webhook";
+import { classifyOutcome, mapReport, verifyVapiRequest } from "@/lib/vapi/webhook";
 
 const SECRET = process.env.VAPI_WEBHOOK_SECRET;
 
@@ -52,24 +62,22 @@ export async function POST(req: NextRequest) {
 
   const message = (body as { message?: unknown })?.message;
   const type = (message as { type?: unknown } | undefined)?.type;
-  // Ack unhandled message types so Vapi does not retry them.
+  // We only subscribe to end-of-call-report; ack anything else so Vapi stops.
   if (type !== "end-of-call-report") return Response.json({ ok: true });
 
   const report = mapReport(message);
 
-  // Prefer metadata; fall back to the ephemeral assistant id.
-  let attemptId = report.attemptId;
-  if (!attemptId && report.assistantId) {
-    const a = await findAttemptForWebhook(null, report.assistantId);
-    attemptId = a?.id ?? null;
-  }
-
-  if (attemptId) {
-    const result = await processSessionEnded({ attemptId, transcript: report.transcript, outcome: report.outcome }, deps);
+  // Resolve the attempt (+ its interview) by metadata first, then by assistant id
+  // (covers a missing metadata echo). The interview's question set drives the
+  // grade-vs-abandon decision (>=50% answered).
+  const resolved = await findAttemptForWebhook(report.attemptId, report.assistantId);
+  if (resolved) {
+    const outcome = classifyOutcome(report.transcript, resolved.interview.questions ?? [], report.endedReason);
+    const result = await processSessionEnded({ attemptId: resolved.id, transcript: report.transcript, outcome }, deps);
     console.info("[vapi/webhook] processed end-of-call-report", {
-      attemptId,
+      attemptId: resolved.id,
       assistantId: report.assistantId,
-      outcome: report.outcome,
+      outcome,
       result,
       transcriptTurns: report.transcript.length,
     });

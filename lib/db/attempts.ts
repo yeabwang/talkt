@@ -46,6 +46,23 @@ export async function findAttemptForWebhook(
   return { id: row.id, status: row.status, interview: toTemplateDTO(row.interview as InterviewRow) };
 }
 
+/**
+ * Owner-scoped attempt + its interview (UI shape) for the client grade trigger.
+ * Used by POST /api/attempts/[id]/grade to enforce ownership and to read the
+ * question set the >=50%-answered decision needs. Null if not the caller's.
+ */
+export async function findAttemptForGrading(
+  attemptId: string,
+  userId: string,
+): Promise<{ id: string; status: string; interview: UiInterview } | null> {
+  const row = await prisma.attempt.findFirst({
+    where: { id: attemptId, userId },
+    select: { id: true, status: true, interview: { select: interviewRowSelect } },
+  });
+  if (!row) return null;
+  return { id: row.id, status: row.status, interview: toTemplateDTO(row.interview as InterviewRow) };
+}
+
 /** Owner-scoped lightweight row for repairing a missed Vapi callback. */
 export async function findAttemptForReconcile(
   attemptId: string,

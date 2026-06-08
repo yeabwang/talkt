@@ -8,6 +8,7 @@ export interface AppUser {
   name: string;
   email: string;
   firstName?: string;
+  // Clerk profile image URL (img.clerk.com); falls back to initials if absent.
   image?: string;
 }
 
@@ -36,14 +37,20 @@ export interface Interview {
   role?: string;
   language?: string;
   focus?: string[];
+  // Core grading criteria the AI builder picked for a custom interview.
   dimensions?: { key: string; label: string }[];
 
+  // --- Directory / voting (populated when an interview comes from the API) ---
   upvotes?: number;
   downvotes?: number;
+  // The signed-in caller's current vote on this interview: 1 up, -1 down, 0 none.
   myVote?: -1 | 0 | 1;
+  // Public attribution; null/undefined when published anonymously (shown as "Community").
   authorName?: string | null;
   anonymous?: boolean;
+  // True when the signed-in caller owns this interview (controls the Publish action).
   mine?: boolean;
+  // True once the owner has published it to the public directory.
   published?: boolean;
 }
 
@@ -85,26 +92,21 @@ export interface Feedback {
   perQuestion: QuestionFeedback[];
 }
 
-// Supported interview languages.
-export const LANGUAGES: string[] = ["English", "Spanish", "French", "German", "Portuguese", "Mandarin", "Hindi", "Arabic", "Japanese"];
+// Languages, voices, and dimensions all derive from the single source of truth
+// (lib/catalog.ts) so adding one there updates the builder, filters, and seed.
+import { DIMENSIONS as CATALOG_DIMENSIONS, LANGUAGES as CATALOG_LANGUAGES, PERSONAS } from "@/lib/catalog";
 
+// Language labels a custom interview can be generated, conducted, and scored in.
+export const LANGUAGES: string[] = CATALOG_LANGUAGES.map((l) => l.label);
+
+// The language an interview runs in; templates default to English.
 export function interviewLanguage(interview: Interview): string {
   return interview.language ?? "English";
 }
 
-export const VOICES: Voice[] = [
-  { id: "adi", name: "Adi", tone: "Calm, measured" },
-  { id: "ren", name: "Ren", tone: "Warm, direct" },
-  { id: "kai", name: "Kai", tone: "Brisk, precise" },
-  { id: "mira", name: "Mira", tone: "Patient, probing" },
-];
+export const VOICES: Voice[] = PERSONAS.map((p) => ({ id: p.key, name: p.name, tone: p.tone }));
 
-export const DIMENSIONS: Dimension[] = [
-  { id: "communication", label: "Communication", blurb: "Clarity, concision, signposting" },
-  { id: "structure", label: "Structure", blurb: "Frameworks, ordering, completeness" },
-  { id: "depth", label: "Depth", blurb: "Substance, specifics, tradeoffs" },
-  { id: "confidence", label: "Confidence", blurb: "Pace, conviction, recovery" },
-];
+export const DIMENSIONS: Dimension[] = CATALOG_DIMENSIONS.map((d) => ({ id: d.key, label: d.label, blurb: d.blurb }));
 
 
 export interface UsageBreakdownRow {
@@ -124,10 +126,11 @@ export interface UsageSummary {
   interviews: number;
   estCost: number;
   costBudget: number;
-  /** Minutes per session, oldest to newest. */
+  /* Minutes per session, oldest -> newest, for the over-time chart */
   trend: number[];
   breakdown: UsageBreakdownRow[];
 }
+
 export const USAGE: UsageSummary = {
   planLabel: "Free plan",
   minutes: 112,
@@ -146,5 +149,5 @@ export const USAGE: UsageSummary = {
   ],
 };
 
-// Runtime attempt history is loaded from the API.
+// Real attempt history + feedback come from the DB once wired; no mock seed.
 export const ATTEMPTS: Attempt[] = [];

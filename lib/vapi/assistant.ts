@@ -20,7 +20,7 @@ export interface AssistantPayload {
     tools: { type: "endCall" }[];
   };
   modelOutputInMessagesEnabled: true;
-  voice: { provider: string; voiceId: string };
+  voice: { provider: string; voiceId: string; model?: string; language?: string };
   transcriber: { provider: string; model: string; language: string };
   // Turn-taking patience prevents interruptions during thoughtful pauses.
   startSpeakingPlan:

@@ -6,7 +6,7 @@ import type { gradeAttempt } from "@/trigger/grade-attempt";
 import { findAttemptForReconcile, findAttemptForWebhook, markAbandoned, markAnalyzing, markFailed, storeVapiIds } from "@/lib/db/attempts";
 import { processSessionEnded, type SessionEndedDeps } from "@/lib/session-ended";
 import { deleteAssistant, listCallsForAssistant, type VapiCallRecord } from "@/lib/vapi/server";
-import { mapCallRecord } from "@/lib/vapi/webhook";
+import { classifyOutcome, mapCallRecord } from "@/lib/vapi/webhook";
 
 const RECONCILE_AFTER_MS = 10_000;
 
@@ -64,12 +64,15 @@ export async function reconcileAttemptFromVapi(attemptId: string, userId: string
     await storeVapiIds(attempt.id, { callId });
   }
 
-  const result = await processSessionEnded({ attemptId: attempt.id, transcript: report.transcript, outcome: report.outcome }, deps);
+  // The question set drives the grade-vs-abandon decision (>=50% answered).
+  const resolved = await findAttemptForWebhook(attempt.id, null);
+  const outcome = classifyOutcome(report.transcript, resolved?.interview.questions ?? [], report.endedReason);
+  const result = await processSessionEnded({ attemptId: attempt.id, transcript: report.transcript, outcome }, deps);
   console.info("[vapi/reconcile] processed ended call", {
     attemptId: attempt.id,
     callId,
     assistantId: report.assistantId,
-    outcome: report.outcome,
+    outcome,
     result,
     transcriptTurns: report.transcript.length,
   });

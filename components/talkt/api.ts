@@ -1,6 +1,7 @@
 "use client";
 
-// Client fetch helpers for TalkT API routes.
+// Client-side fetch helpers for the template directory APIs. Server logic lives
+// in app/api/* + lib/db/*; these just shape requests and surface errors.
 
 import type { Attempt, Interview } from "@/components/talkt/data";
 
@@ -61,13 +62,18 @@ export async function persistBuiltInterview(payload: BuiltInterviewPayload): Pro
   return data.interview;
 }
 
+// ── Voice call (Vapi) ────────────────────────────────────────────────
+
 /**
- * Server-resolved call session. Prompt and questions stay in the ephemeral assistant.
+ * Server-resolved call session. The browser starts the call with `@vapi-ai/web`
+ * using `assistantId` + `publicKey`; the system prompt + questions live only in
+ * the ephemeral assistant created server-side and never reach the client.
  */
 export interface CallSession {
   attemptId: string;
-  assistantId: string;
-  publicKey: string;
+  assistantId: string; // ephemeral Vapi assistant id
+  publicKey: string; // NEXT_PUBLIC_VAPI_PUBLIC_KEY
+  // Resolved voice persona name, shown on the interviewer tile.
   interviewerName: string;
 }
 
@@ -92,11 +98,38 @@ export interface AttemptStatus {
   perQuestion?: { q: string; rating: number; critique: string; model: string }[];
 }
 
-/** Poll an attempt until server-side grading finishes. */
+/** Poll an attempt's analysis status (used as the fallback when there is no live
+ * transcript, e.g. opening a report from history). */
 export async function fetchAttemptStatus(attemptId: string): Promise<AttemptStatus> {
   const res = await fetch(`/api/attempts/${attemptId}`, { headers: { Accept: "application/json" } });
   if (!res.ok) return asError(res);
   return (await res.json()) as AttemptStatus;
+}
+
+/** A single transcript turn sent to the grade trigger. */
+export interface CallTurn {
+  role: string;
+  text: string;
+}
+
+/** Result of triggering grading: a run handle to subscribe to, or a terminal state. */
+export type GradeHandle =
+  | { status: "grading"; runId: string; publicAccessToken: string }
+  | { status: "ready" | "abandoned" | "failed" | "analyzing" };
+
+/**
+ * Trigger grading for a just-finished call, posting the transcript the browser
+ * captured. The server decides grade-vs-abandon (>=50% answered) and returns a
+ * Realtime run handle for progress streaming.
+ */
+export async function gradeAttempt(attemptId: string, transcript: CallTurn[]): Promise<GradeHandle> {
+  const res = await fetch(`/api/attempts/${attemptId}/grade`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transcript }),
+  });
+  if (!res.ok) return asError(res);
+  return (await res.json()) as GradeHandle;
 }
 
 /** Publish an already-persisted interview to the public directory. */
