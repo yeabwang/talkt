@@ -22,6 +22,11 @@ export interface ResolvedVoice {
   tone: string;
 }
 
+// Last-resort identity, used only in the (static-data-impossible) case that
+// PERSONAS — and therefore the seed pool — is empty and the DB seed never ran.
+// Keeps the start path non-throwing instead of dereferencing DEFAULT_AGENTS[0].
+const FALLBACK_AGENT: ResolvedVoice = { key: "default", name: "Interviewer", tone: "Neutral" };
+
 /** Insert the default persona pool if the table is empty. Idempotent. */
 export async function ensureVoiceAgents(): Promise<void> {
   await prisma.voiceAgent.createMany({ data: DEFAULT_AGENTS, skipDuplicates: true });
@@ -41,7 +46,7 @@ export async function resolveVoiceAgent(key: string): Promise<ResolvedVoice> {
 
   if (!agent) {
     const d = DEFAULT_AGENTS[0];
-    return { key: d.key, name: d.name, tone: d.tone };
+    return d ? { key: d.key, name: d.name, tone: d.tone } : FALLBACK_AGENT;
   }
   return { key: agent.key, name: agent.name, tone: agent.tone };
 }

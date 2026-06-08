@@ -122,10 +122,15 @@ export function toLanguageLabel(code: string | null | undefined): string {
   return LABEL_BY_CODE.get(code.trim().toLowerCase()) ?? LANGUAGE_LABELS[code.trim().toLowerCase()] ?? "English";
 }
 
-/** Display label -> ISO code. Unknown/blank falls back to "en". */
+/**
+ * Label-or-code -> ISO code. A known code passes through (so "fr" stays "fr"),
+ * a known display label maps to its code, and anything else falls back to "en".
+ */
 export function toLanguageCode(label: string | null | undefined): string {
   if (!label) return "en";
-  return CODE_BY_LABEL.get(label.trim().toLowerCase()) ?? "en";
+  const t = label.trim().toLowerCase();
+  if (LABEL_BY_CODE.has(t)) return t; // already a known ISO code
+  return CODE_BY_LABEL.get(t) ?? "en";
 }
 
 /** Normalize a code-or-label into an ISO code (known codes pass through). */
