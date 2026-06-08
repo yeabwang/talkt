@@ -3,16 +3,18 @@
 // catalog (lib/vapi/voices.ts), so there is no availability to poll and no voice
 // id stored here. resolveVoiceAgent() is a pure persona lookup (key/name/tone)
 // with the unknown-key fallback preserved.
+import { PERSONAS } from "@/lib/catalog";
 import { prisma } from "@/lib/prisma";
 
-// Seed personas surfaced in the UI (components/talkt/data.ts VOICES). Selection
-// is by key; the spoken voice is resolved worker-side (agent/src/model-config.ts).
-const DEFAULT_AGENTS = [
-  { key: "adi", name: "Adi", tone: "Calm, measured", language: "en" },
-  { key: "ren", name: "Ren", tone: "Warm, direct", language: "en" },
-  { key: "kai", name: "Kai", tone: "Brisk, precise", language: "en" },
-  { key: "mira", name: "Mira", tone: "Patient, probing", language: "en" },
-];
+// Seed personas, derived from the catalog (the single source of truth). Selection
+// is by key; the spoken voice id is resolved in lib/vapi/voices.ts. `language`
+// here is just the persona's primary language for the seed row.
+const DEFAULT_AGENTS = PERSONAS.map((p) => ({
+  key: p.key,
+  name: p.name,
+  tone: p.tone,
+  language: p.languages[0] ?? "en",
+}));
 
 export interface ResolvedVoice {
   key: string;

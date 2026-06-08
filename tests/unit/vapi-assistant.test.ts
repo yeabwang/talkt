@@ -69,11 +69,17 @@ test("carries the cap, the end-call tool, and attempt metadata", () => {
   assert.deepEqual(a.metadata, { attemptId: "a1" });
 });
 
-test("resolves the persona + language voice", () => {
+test("resolves the persona + language voice and speaks the interview language", () => {
+  // Cartesia base voice now carries the multilingual model + language param.
   const en = buildVapiAssistant(job({ persona: "adi", languageCode: "en" }), env);
-  assert.deepEqual(en.voice, { provider: "cartesia", voiceId: "5c5ad5e7-1020-476b-8b91-fdcbe9cc313c" });
+  assert.deepEqual(en.voice, { provider: "cartesia", voiceId: "5c5ad5e7-1020-476b-8b91-fdcbe9cc313c", model: "sonic-3", language: "en" });
+  // A native per-language override (Spanish for Kai) passes through unchanged.
   const es = buildVapiAssistant(job({ persona: "kai", languageCode: "es" }), env);
   assert.deepEqual(es.voice, { provider: "11labs", voiceId: "cjVigY5qzO86Huf0OWal" });
+  // Other languages: the Cartesia voice is told to speak them (the fixed bug).
+  const fr = buildVapiAssistant(job({ persona: "adi", languageCode: "fr" }), env);
+  assert.equal(fr.voice.language, "fr");
+  assert.equal(fr.voice.model, "sonic-3");
   assert.equal(en.transcriber.language, "en");
 });
 

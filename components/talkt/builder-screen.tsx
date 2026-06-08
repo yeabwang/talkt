@@ -3,7 +3,8 @@
 import * as React from "react";
 
 import { persistBuiltInterview, publishInterview, type BuiltInterviewPayload } from "@/components/talkt/api";
-import { LANGUAGES, VOICES, type AppUser, type Interview } from "@/components/talkt/data";
+import { LANGUAGES, type AppUser, type Interview } from "@/components/talkt/data";
+import { defaultPersonaForLanguage, personasForLanguage } from "@/lib/catalog";
 import type { TalkTRoute } from "@/components/talkt/app-shell";
 import { AgentAvatar, Avatar, Icon, SectionHeader, StatusDot, TalkTButton } from "@/components/talkt/primitives";
 import { PublishDialog } from "@/components/talkt/publish-dialog";
@@ -67,6 +68,10 @@ export function BuilderScreen({
   const [turn, setTurn] = React.useState<BuilderTurn | null>(null);
   const [selected, setSelected] = React.useState<string[]>([]);
   const [language, setLanguage] = React.useState("English");
+  // The interviewer is chosen here, at generation time, and gated to personas
+  // that can speak the selected language. It is persisted on the interview and
+  // never re-chosen at call time.
+  const [voiceId, setVoiceId] = React.useState(() => defaultPersonaForLanguage("English").key);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [publishing, setPublishing] = React.useState(false);
   const [publishError, setPublishError] = React.useState<string | null>(null);
@@ -82,6 +87,12 @@ export function BuilderScreen({
   const summary = turn?.summary ?? EMPTY_SUMMARY;
   const ready = Boolean(turn?.ready);
   const questions = turn?.questions ?? [];
+
+  // Interviewers offered for the current language. The selected voice is clamped
+  // to this set during render, so switching to a language the current pick can't
+  // speak falls back to that language's default without a sync effect.
+  const availableVoices = React.useMemo(() => personasForLanguage(language), [language]);
+  const selectedVoiceId = (availableVoices.find((p) => p.key === voiceId) ?? availableVoices[0]).key;
 
   React.useEffect(() => {
     threadRef.current = thread;
@@ -159,11 +170,11 @@ export function BuilderScreen({
       minutes: summary.minutes || Math.max(15, qs.length * 3),
       focus: summary.focus,
       language,
-      voiceId: pickVoice(role),
+      voiceId: selectedVoiceId,
       questions: qs,
       dimensions: turn?.dimensions ?? [],
     };
-  }, [summary, language, turn]);
+  }, [summary, language, selectedVoiceId, turn]);
 
   // Persist the built interview as a private DB row exactly once. Both Start and
   // Publish funnel through here so they operate on the same row.
@@ -178,10 +189,9 @@ export function BuilderScreen({
   // user can still run it without a DB row.
   const localInterview = React.useCallback((): Interview => {
     const qs = turn?.questions ?? [];
-    const role = summary.role || summary.title || "Custom interview";
     return {
       id: `custom-${Date.now()}`,
-      title: summary.title || `${role} (custom)`,
+      title: summary.title || `${summary.role || summary.title || "Custom interview"} (custom)`,
       subtitle: "Built with the AI builder",
       icon: "sparkles",
       category: summary.category || "Custom",
@@ -191,7 +201,7 @@ export function BuilderScreen({
       author: "You",
       source: "Custom",
       takes: 0,
-      voice: pickVoice(role),
+      voice: selectedVoiceId,
       language,
       custom: true,
       blurb: summary.blurb || "Generated from your brief in the builder.",
@@ -199,7 +209,7 @@ export function BuilderScreen({
       focus: summary.focus,
       dimensions: turn?.dimensions ?? [],
     };
-  }, [summary, language, turn]);
+  }, [summary, language, selectedVoiceId, turn]);
 
   // Start saves the interview as private (giving it a real DB row), then opens
   // the lobby. Falls back to a local-only interview if persistence fails.
@@ -340,6 +350,22 @@ export function BuilderScreen({
           </p>
         </div>
 
+        <div style={{ marginBottom: 18 }}>
+          <span className="mono-label" style={{ display: "block", marginBottom: 8 }}>
+            Interviewer
+          </span>
+          <select className="field" value={selectedVoiceId} onChange={(event) => setVoiceId(event.target.value)} disabled={ready} style={{ appearance: "auto" }}>
+            {availableVoices.map((persona) => (
+              <option key={persona.key} value={persona.key}>
+                {persona.name} · {persona.tone}
+              </option>
+            ))}
+          </select>
+          <p className="caption" style={{ marginTop: 7, fontSize: 12 }}>
+            Only interviewers who speak {language} are shown.
+          </p>
+        </div>
+
         <div className="card rounded-lg" style={{ padding: 18, marginBottom: 18 }}>
           <div className="flex items-center gap-3" style={{ marginBottom: 16 }}>
             <div style={{ width: 38, height: 38, display: "grid", placeItems: "center", border: "1px solid var(--border)" }}>
@@ -355,7 +381,7 @@ export function BuilderScreen({
             <DraftRow label="Focus" value={summary.focus.length ? summary.focus.join(" · ") : "-"} />
             <DraftRow label="Questions" value={ready ? questions.length : summary.count || "-"} />
             <DraftRow label="Duration" value={summary.minutes ? `~${summary.minutes} min` : "-"} />
-            <DraftRow label="Interviewer" value={summary.role ? `${VOICES.find((voice) => voice.id === pickVoice(summary.role))?.name ?? "-"} · assigned` : "Auto-assigned"} last />
+            <DraftRow label="Interviewer" value={availableVoices.find((p) => p.key === selectedVoiceId)?.name ?? availableVoices[0].name} last />
           </div>
         </div>
 
@@ -467,10 +493,4 @@ function DraftRow({ label, value, last }: { label: string; value: React.ReactNod
       <span style={{ fontSize: 13, fontWeight: 500, textAlign: "right", maxWidth: 200 }}>{value}</span>
     </div>
   );
-}
-
-// Deterministic voice pick so the same role keeps the same interviewer.
-function pickVoice(role: string): string {
-  if (!role) return "ren";
-  return VOICES[role.length % VOICES.length].id;
 }

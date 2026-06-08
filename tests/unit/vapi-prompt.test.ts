@@ -1,8 +1,9 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
+import { getPersona } from "@/lib/catalog";
 import type { InterviewJob } from "@/lib/vapi/job";
-import { DELIVERY_CUES, firstMessage, systemPrompt } from "@/lib/vapi/prompt";
+import { firstMessage, systemPrompt } from "@/lib/vapi/prompt";
 
 const job: InterviewJob = {
   attemptId: "a1",
@@ -16,11 +17,12 @@ const job: InterviewJob = {
   maxDurationSeconds: 1020,
 };
 
-test("systemPrompt embeds title, language, persona cue, and numbered questions", () => {
+test("systemPrompt embeds persona character, title, language, and numbered questions", () => {
   const p = systemPrompt(job);
-  assert.match(p, /You are Adi, the interviewer for "Systems Design"/);
+  assert.match(p, /You are Adi, /);
+  assert.ok(p.includes(getPersona("adi").character));
+  assert.match(p, /interviewer for "Systems Design"/);
   assert.match(p, /Speak entirely in English/);
-  assert.ok(p.includes(DELIVERY_CUES.adi));
   assert.match(p, /1\. Tell me about a system you scaled\./);
   assert.match(p, /2\. How do you handle caching\?/);
 });

@@ -2,49 +2,11 @@
 
 import * as React from "react";
 
-import { type CallSession } from "@/components/talkt/api";
+import { type CallSession, type CallTurn } from "@/components/talkt/api";
 import { type AppUser, type Interview } from "@/components/talkt/data";
 import { transcriptBlocks, useVapiCall } from "@/components/talkt/use-vapi-call";
 import { AgentAvatar, Avatar, Icon, Waveform, Wordmark } from "@/components/talkt/primitives";
-
-// Words too generic to identify which question is being asked. English-only, but
-// harmless for other languages (they just keep more tokens).
-const QUESTION_STOPWORDS = new Set([
-  "the", "and", "for", "you", "your", "what", "how", "why", "can", "could", "would", "tell", "about",
-  "give", "with", "that", "this", "please", "describe", "explain", "walk", "through", "have", "are",
-  "did", "does", "any", "his", "her", "their", "from", "into", "when", "where", "who", "which",
-]);
-
-// Significant tokens of a line, across scripts (keeps accents/non-latin).
-function sigWords(text: string): string[] {
-  return text
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .split(/\s+/)
-    .filter((w) => w.length > 2 && !QUESTION_STOPWORDS.has(w));
-}
-
-// How many core questions the interviewer has reached, in order. Advances only
-// when an assistant turn carries enough of the next question's keywords — so
-// follow-ups and acknowledgements don't push the bar, but moving to the next
-// question does. Paraphrase may delay a step (under-counts, never over-counts).
-function countQuestionsReached(assistantTexts: string[], questions: string[]): number {
-  if (!questions.length) return 0;
-  const qWords = questions.map(sigWords);
-  let reached = 0;
-  for (const text of assistantTexts) {
-    if (reached >= questions.length) break;
-    const target = qWords[reached];
-    if (!target.length) {
-      reached += 1;
-      continue;
-    }
-    const spoken = new Set(sigWords(text));
-    const hits = target.filter((w) => spoken.has(w)).length;
-    if (hits / target.length >= 0.5) reached += 1;
-  }
-  return reached;
-}
+import { questionsReached } from "@/lib/transcript";
 
 export function LiveInterviewScreen({
   interview,
@@ -58,9 +20,10 @@ export function LiveInterviewScreen({
   user: AppUser;
   session: CallSession;
   camStream: MediaStream | null;
-  // Grading is server-driven now (the worker owns the transcript), so end only
-  // carries the attempt id — the results screen polls its status.
-  onEnd: (attemptId: string) => void;
+  // On end (interviewer close, time cap, or candidate hangup) we hand the results
+  // screen the attempt id + the transcript the browser captured, so it can trigger
+  // grading and stream progress. The grade endpoint decides grade-vs-abandon.
+  onEnd: (attemptId: string, transcript: CallTurn[]) => void;
   onCancel: () => void;
 }) {
   const call = useVapiCall();
@@ -68,6 +31,8 @@ export function LiveInterviewScreen({
   const [showTranscript, setShowTranscript] = React.useState(false);
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const startedRef = React.useRef(false);
+  // Latest transcript, kept in a ref so the end handler sends the final turns.
+  const transcriptRef = React.useRef<CallTurn[]>([]);
 
   // Total core questions, for the question-driven progress bar.
   const totalQuestions = interview.questions?.length || interview.count || 1;
@@ -99,34 +64,27 @@ export function LiveInterviewScreen({
   // Closing countdown shown before handoff (null until the call ends naturally).
   const [countdown, setCountdown] = React.useState<number | null>(null);
 
-  // Decide the closing path once the line drops, then drive it with a timer.
+  // Once the line drops — for any reason (interviewer close, time cap, candidate
+  // hangup) — run a short visible countdown, then hand the results screen the
+  // attempt id + captured transcript. The grade endpoint decides grade-vs-abandon
+  // (>=50% answered), so the candidate's own hangup is graded if they got far
+  // enough; otherwise results shows the "too short" state.
   const endedHandledRef = React.useRef(false);
   React.useEffect(() => {
     if (call.status !== "ended" || endedHandledRef.current) return;
     endedHandledRef.current = true;
 
-    if (call.endedManually) {
-      // Candidate hung up mid-interview. The worker classifies this as abandoned
-      // server-side (no end_interview before disconnect), so we just bounce to the
-      // dashboard after a brief beat — no client abandon call.
-      const timer = window.setTimeout(onCancel, 1500);
-      return () => window.clearTimeout(timer);
-    }
-
-    // Natural (end_interview) or time-cap completion — a short visible countdown
-    // (3..2..1) instead of an abrupt cut, then route to results (which polls the
-    // server-graded status; the worker already owns the transcript).
     let remaining = 3;
     const tick = window.setInterval(() => {
       remaining -= 1;
       setCountdown(remaining);
       if (remaining <= 0) {
         window.clearInterval(tick);
-        onEnd(session.attemptId);
+        onEnd(session.attemptId, transcriptRef.current);
       }
     }, 1000);
     return () => window.clearInterval(tick);
-  }, [call.status, call.endedManually, onCancel, onEnd, session.attemptId]);
+  }, [call.status, onEnd, session.attemptId]);
 
   const aiSpeaking = call.assistantSpeaking;
   const youSpeaking = call.userSpeaking && !call.muted;
@@ -134,13 +92,16 @@ export function LiveInterviewScreen({
   // Turn-by-turn view, including the current in-flight transcript from either
   // speaker so the drawer mirrors what the candidate hears in real time.
   const conversation = React.useMemo(() => transcriptBlocks(call.turns), [call.turns]);
+  React.useEffect(() => {
+    transcriptRef.current = conversation.map((block) => ({ role: block.role, text: block.text }));
+  }, [conversation]);
 
   // Progress tracks how far through the question set the interviewer has gotten,
   // not elapsed time (interviews finish well before the cap). Advances when the
   // interviewer reaches the next core question — not on every user turn, which
   // over-counted follow-ups and filled the bar on question one.
   const reached = React.useMemo(
-    () => countQuestionsReached(conversation.filter((b) => b.role === "assistant").map((b) => b.text), interview.questions ?? []),
+    () => questionsReached(conversation.filter((b) => b.role === "assistant").map((b) => b.text), interview.questions ?? []),
     [conversation, interview.questions],
   );
   const progress = Math.min(100, (reached / totalQuestions) * 100);
@@ -157,25 +118,13 @@ export function LiveInterviewScreen({
     return (
       <div style={{ minHeight: "100vh", background: "var(--background)", display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
         <div className="text-center fade-in" style={{ maxWidth: 420 }}>
-          {call.endedManually ? (
-            <>
-              <Icon name="phone" size={26} style={{ color: "var(--muted-foreground)", transform: "rotate(135deg)" }} />
-              <h2 className="h2" style={{ margin: "16px 0 8px" }}>
-                Interview ended
-              </h2>
-              <p className="caption">You ended early — this attempt won&apos;t be scored.</p>
-            </>
-          ) : (
-            <>
-              <div className="stat-value" style={{ fontSize: 56, lineHeight: 1, color: "var(--foreground)" }}>
-                {Math.max(0, countdown ?? 3)}
-              </div>
-              <h2 className="h2" style={{ margin: "16px 0 8px" }}>
-                Wrapping up your interview
-              </h2>
-              <p className="caption">Preparing your results…</p>
-            </>
-          )}
+          <div className="stat-value" style={{ fontSize: 56, lineHeight: 1, color: "var(--foreground)" }}>
+            {Math.max(0, countdown ?? 3)}
+          </div>
+          <h2 className="h2" style={{ margin: "16px 0 8px" }}>
+            Wrapping up your interview
+          </h2>
+          <p className="caption">Preparing your results…</p>
         </div>
       </div>
     );

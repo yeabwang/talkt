@@ -92,27 +92,21 @@ export interface Feedback {
   perQuestion: QuestionFeedback[];
 }
 
-// Languages a custom interview can be generated, conducted, and scored in.
-export const LANGUAGES: string[] = ["English", "Spanish", "French", "German", "Portuguese", "Mandarin", "Hindi", "Arabic", "Japanese"];
+// Languages, voices, and dimensions all derive from the single source of truth
+// (lib/catalog.ts) so adding one there updates the builder, filters, and seed.
+import { DIMENSIONS as CATALOG_DIMENSIONS, LANGUAGES as CATALOG_LANGUAGES, PERSONAS } from "@/lib/catalog";
+
+// Language labels a custom interview can be generated, conducted, and scored in.
+export const LANGUAGES: string[] = CATALOG_LANGUAGES.map((l) => l.label);
 
 // The language an interview runs in; templates default to English.
 export function interviewLanguage(interview: Interview): string {
   return interview.language ?? "English";
 }
 
-export const VOICES: Voice[] = [
-  { id: "adi", name: "Adi", tone: "Calm, measured" },
-  { id: "ren", name: "Ren", tone: "Warm, direct" },
-  { id: "kai", name: "Kai", tone: "Brisk, precise" },
-  { id: "mira", name: "Mira", tone: "Patient, probing" },
-];
+export const VOICES: Voice[] = PERSONAS.map((p) => ({ id: p.key, name: p.name, tone: p.tone }));
 
-export const DIMENSIONS: Dimension[] = [
-  { id: "communication", label: "Communication", blurb: "Clarity, concision, signposting" },
-  { id: "structure", label: "Structure", blurb: "Frameworks, ordering, completeness" },
-  { id: "depth", label: "Depth", blurb: "Substance, specifics, tradeoffs" },
-  { id: "confidence", label: "Confidence", blurb: "Pace, conviction, recovery" },
-];
+export const DIMENSIONS: Dimension[] = CATALOG_DIMENSIONS.map((d) => ({ id: d.key, label: d.label, blurb: d.blurb }));
 
 
 export interface UsageBreakdownRow {

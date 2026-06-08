@@ -17,7 +17,7 @@ import { jsonError } from "@/lib/api";
 import { findAttemptForWebhook, markAbandoned, markAnalyzing, markFailed } from "@/lib/db/attempts";
 import { processSessionEnded, type SessionEndedDeps } from "@/lib/session-ended";
 import { deleteAssistant } from "@/lib/vapi/server";
-import { mapReport, verifyVapiRequest } from "@/lib/vapi/webhook";
+import { classifyOutcome, mapReport, verifyVapiRequest } from "@/lib/vapi/webhook";
 
 const SECRET = process.env.VAPI_WEBHOOK_SECRET;
 
@@ -67,21 +67,17 @@ export async function POST(req: NextRequest) {
 
   const report = mapReport(message);
 
-  // Resolve the attempt by metadata first, then by assistant id (covers a
-  // missing metadata echo). processSessionEnded re-resolves by id internally, so
-  // pass the resolved id through.
-  let attemptId = report.attemptId;
-  if (!attemptId && report.assistantId) {
-    const a = await findAttemptForWebhook(null, report.assistantId);
-    attemptId = a?.id ?? null;
-  }
-
-  if (attemptId) {
-    const result = await processSessionEnded({ attemptId, transcript: report.transcript, outcome: report.outcome }, deps);
+  // Resolve the attempt (+ its interview) by metadata first, then by assistant id
+  // (covers a missing metadata echo). The interview's question set drives the
+  // grade-vs-abandon decision (>=50% answered).
+  const resolved = await findAttemptForWebhook(report.attemptId, report.assistantId);
+  if (resolved) {
+    const outcome = classifyOutcome(report.transcript, resolved.interview.questions ?? [], report.endedReason);
+    const result = await processSessionEnded({ attemptId: resolved.id, transcript: report.transcript, outcome }, deps);
     console.info("[vapi/webhook] processed end-of-call-report", {
-      attemptId,
+      attemptId: resolved.id,
       assistantId: report.assistantId,
-      outcome: report.outcome,
+      outcome,
       result,
       transcriptTurns: report.transcript.length,
     });

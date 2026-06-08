@@ -26,7 +26,7 @@ export interface AssistantPayload {
     tools: { type: "endCall" }[];
   };
   modelOutputInMessagesEnabled: true;
-  voice: { provider: string; voiceId: string };
+  voice: { provider: string; voiceId: string; model?: string; language?: string };
   transcriber: { provider: string; model: string; language: string };
   // Turn-taking patience. Keeps the interviewer from cutting in when the
   // candidate pauses to think or uses filler words (replaces the old LiveKit

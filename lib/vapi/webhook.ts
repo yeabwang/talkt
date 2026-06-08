@@ -2,13 +2,12 @@
 // Trigger SDK / network so it is unit-testable; the route wires the real deps.
 import { timingSafeEqual } from "node:crypto";
 
-import { sanitizeTranscript, type Turn } from "@/lib/transcript";
+import { answeredAtLeastHalf, sanitizeTranscript, type Turn } from "@/lib/transcript";
 
 export type Outcome = "completed" | "abandoned";
 
-// Reasons that mean setup/pipeline failed before a real interview happened.
-// Everything else with answers is graded, except a plain customer hangup before
-// the assistant's closing turn.
+// Reasons that mean setup/pipeline failed before a real interview happened — no
+// usable transcript, so never gradable regardless of answered ratio.
 const ABANDON_REASONS = new Set<string>([
   "customer-did-not-answer",
   "customer-did-not-give-microphone-permission",
@@ -63,7 +62,9 @@ export interface ParsedReport {
   attemptId: string | null;
   assistantId: string | null;
   transcript: Turn[];
-  outcome: Outcome;
+  // Raw Vapi end reason; the outcome is decided by the caller via classifyOutcome,
+  // which needs the interview's question set (not available at parse time).
+  endedReason: string | undefined;
 }
 
 function turnsFromMessages(messages: unknown): Turn[] {
@@ -101,19 +102,15 @@ function messagesFromTranscript(transcript: unknown): ReportMessage[] {
     .filter((m): m is ReportMessage => m !== null);
 }
 
-function assistantClosed(transcript: Turn[]): boolean {
-  const lastAssistant = [...transcript].reverse().find((t) => t.role === "assistant")?.text.toLowerCase() ?? "";
-  return /\b(that'?s (everything|the interview complete)|interview is complete|feedback'?s being|feedback is being|report'?s being|report is being|being prepared|prepared now|you'?ll see it in a moment)\b/.test(lastAssistant);
-}
-
-/** Classify the call. Abandoned when there is no candidate speech, or the end
- * reason is an early customer hangup / setup failure. Completed otherwise. */
-export function classifyOutcome(transcript: Turn[], endedReason: string | undefined): Outcome {
-  const userTurns = transcript.filter((t) => t.role === "user").length;
-  if (userTurns === 0) return "abandoned";
+/**
+ * Classify the call into completed (grade it) vs abandoned (discard). The call
+ * is graded when at least half the questions were answered — regardless of who
+ * ended it (the interviewer closing or the candidate hanging up). Setup/pipeline
+ * failures with no usable transcript are always abandoned.
+ */
+export function classifyOutcome(transcript: Turn[], questions: string[], endedReason: string | undefined): Outcome {
   if (endedReason && ABANDON_REASONS.has(endedReason)) return "abandoned";
-  if (endedReason === "customer-ended-call" && !assistantClosed(transcript)) return "abandoned";
-  return "completed";
+  return answeredAtLeastHalf(transcript, questions) ? "completed" : "abandoned";
 }
 
 /** Map a Vapi `end-of-call-report` message object to attempt id + transcript +
@@ -140,7 +137,7 @@ export function mapReport(msg: unknown): ParsedReport {
   const transcript = turnsFromMessages(m.messages ?? artifact.messages ?? artifact.messagesOpenAIFormatted);
   const endedReason = typeof m.endedReason === "string" ? m.endedReason : typeof call.endedReason === "string" ? call.endedReason : undefined;
 
-  return { attemptId, assistantId, transcript, outcome: classifyOutcome(transcript, endedReason) };
+  return { attemptId, assistantId, transcript, endedReason };
 }
 
 /** Map a completed Vapi `/call` record into the same shape as an

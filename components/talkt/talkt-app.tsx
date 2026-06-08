@@ -112,7 +112,7 @@ function mergePathParams(next: AppPathState, current: Record<string, unknown>): 
     };
   }
   if (next.route === "results" && currentAttemptId && currentAttemptId === nextAttemptId) {
-    return { ...next.params, interview: current.interview, fromHistory: current.fromHistory };
+    return { ...next.params, interview: current.interview, fromHistory: current.fromHistory, transcript: current.transcript };
   }
   return next.params;
 }
@@ -393,7 +393,7 @@ export function TalkTApp() {
         user={user}
         session={session}
         camStream={camStream}
-        onEnd={(attemptId) => navigate("results", { interview: active, attemptId })}
+        onEnd={(attemptId, transcript) => navigate("results", { interview: active, attemptId, transcript })}
         onCancel={() => navigate("dashboard")}
       />
     );
@@ -422,10 +422,12 @@ export function TalkTApp() {
   } else if (route === "results") {
     const active = interview ?? allInterviews[0];
     const attemptId = params.attemptId as string | undefined;
+    const transcript = params.transcript as { role: string; text: string }[] | undefined;
     body = (
       <ResultsScreen
         interview={active}
         attemptId={attemptId}
+        transcript={transcript}
         navigate={navigate}
         startInterview={startInterview}
       />

@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import type { NextRequest } from "next/server";
 
 import { badRequest, jsonError, tooManyRequests, unauthorized } from "@/lib/api";
+import { CATEGORIES } from "@/lib/catalog";
 import { chatJSON, type ChatMessage } from "@/lib/llm";
 import { createRateLimiter } from "@/lib/rate-limit";
 
@@ -57,7 +58,7 @@ You MUST reply with a single strict JSON object and NOTHING else, matching exact
   "summary": {                                   // best-known draft so far; use "" / 0 / [] for unknowns
     "title": string,                             // a concise interview title
     "role": string,
-    "category": string,                          // e.g. Engineering, Product, Healthcare, Business, Design, General
+    "category": string,                          // one of: ${CATEGORIES.join(", ")}
     "difficulty": string,                        // e.g. Entry level, Mid, Senior, All levels
     "blurb": string,                             // ONE concise sentence describing what this interview practices (shown on its card)
     "focus": string[],                           // themes the interview leans on
