@@ -1,4 +1,3 @@
-
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="doc/assets/logo-dark.svg">
@@ -7,7 +6,7 @@
   </picture>
 </p>
 
-TalkT is a Next.js app for spoken interview practice. Users create or select an
+TalkT is a place for spoken interview practice. Users create or select an
 interview, take it through a Vapi browser voice call, then get a structured
 score report from DeepSeek grading.
 
