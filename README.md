@@ -1,180 +1,111 @@
-<div align="center">
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="doc/assets/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="doc/assets/logo.svg">
+    <img alt="TalkT" src="doc/assets/logo.svg" width="240">
+  </picture>
+</p>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="docs/assets/logo.svg">
-  <img alt="talkt" src="docs/assets/logo.svg" width="320">
-</picture>
+TalkT is a place for spoken interview practice. Users create or select an
+interview, take it through a Vapi browser voice call, then get a structured
+score report from DeepSeek grading.
 
-### AI voice interviews — design one, talk it through, get scored.
+## Stack
 
-Practice interviews **out loud** with a real-time AI interviewer, then get a structured, evidence-backed report seconds after you hang up.
+| Area      | Tooling                                           |
+| --------- | ------------------------------------------------- |
+| App       | Next.js 16, React 19, TypeScript                  |
+| UI        | Tailwind CSS 4, shadcn/ui, Radix UI, Geist        |
+| Auth      | Clerk                                             |
+| Data      | Prisma 7, PostgreSQL                              |
+| Voice     | Vapi Web SDK and server SDK                       |
+| LLM       | DeepSeek through an OpenAI-compatible JSON client |
+| Jobs      | Trigger.dev                                       |
+| Artifacts | Vercel Blob                                       |
 
-[![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=next.js&logoColor=white)](https://nextjs.org)
-[![React](https://img.shields.io/badge/React-19-149eca?logo=react&logoColor=white)](https://react.dev)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![Prisma](https://img.shields.io/badge/Prisma-7-2d3748?logo=prisma&logoColor=white)](https://www.prisma.io)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-relational-4169e1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+## Local Setup
 
-</div>
+Prerequisites:
 
----
-
-## What is talkt?
-
-**talkt** is a place for spoken interview practice. You describe the
-interview you want in a short chat, an AI builder turns that into a structured
-interview (questions + the dimensions it should be scored on), and then you
-**actually talk to an AI interviewer** over your microphone. 
-
-<div align="center">
-  <img alt="Dashboard" src="docs/assets/screenshots/dashboard.png" width="49%">
-  <img alt="Live interview" src="docs/assets/screenshots/live.png" width="49%">
-  <br/>
-  <img alt="Builder" src="docs/assets/screenshots/builder.png" width="49%">
-  <img alt="Template library" src="docs/assets/screenshots/library.png" width="49%">
-</div>
-
-## Features
-
-- 🎙️ **Real-time voice interview** — talk to an AI interviewer with natural
-  turn-taking, patience for "thinking out loud", and persona voices (per language).
-- 💬 **Conversational builder** — describe a role; an LLM proposes the questions
-  and the 4 scoring dimensions, with live suggestions and a running summary.
-- 📊 **Automated, evidence-backed grading** — overall + per-dimension scores,
-  per-question critique and model answers, strengths/improvements with quotes.
-- 🌍 **Multi-language** — question generation, the interviewer's voice, and the
-  written report all follow the interview's language.
-- 🏆 **Public template directory** — publish custom interviews, vote them up/down;
-  a Wilson lower-bound rank surfaces quality over raw count, with auto-takedown of
-  heavily-downvoted templates.
-- 🎯 **Personalized recommendations** — a recency-decayed, content-based profile
-  re-orders the directory per user with no cross-account data and no cold-start cliff.
-- 🔒 **Secure by default** — auth on every route (protected-first middleware),
-  rate-limited cost-bearing endpoints, fail-closed webhook verification, and a
-  server-only privacy seam so prompts and questions never reach the browser.
-
-## Tech stack
-
-| Layer           | Choice                                                                          |
-| --------------- | ------------------------------------------------------------------------------- |
-| Framework       | **Next.js 16** (App Router) + **React 19** + **TypeScript**   |
-| Styling         | **Tailwind CSS v4**, **shadcn/ui** + **Radix UI**, Geist font |
-| Auth            | **Clerk**                                                                 |
-| Database        | **PostgreSQL** via **Prisma 7** (`@prisma/adapter-pg`)            |
-| Voice           | **Vapi** (`@vapi-ai/web` client, `@vapi-ai/server-sdk`)               |
-| LLM             | **DeepSeek** (OpenAI-compatible) for builder + grading                    |
-| Background jobs | **Trigger.dev** (durable, idempotent grading task)                        |
-| Object storage  | **Vercel Blob** (transcripts, raw analysis)                               |
-| Hosting         | **Vercel**                                                                |
-
-## How it works
-
-```mermaid
-flowchart LR
-  U[User] -->|describe role| B[Builder LLM]
-  B -->|questions + dimensions| I[(Interview)]
-  U -->|start call| C["POST /interviews/:id/call"]
-  C -->|ephemeral assistant| V[Vapi]
-  U <-->|voice| V
-  V -->|end-of-call report| W["POST /vapi/webhook"]
-  W -->|trigger grade-attempt| T[Trigger.dev]
-  T -->|DeepSeek analysis| F[(Feedback)]
-  U -->|poll status| F
-```
-
-1. **Build** — the builder endpoint runs one LLM turn at a time, returning a
-   strict-shaped interview (questions + scoring dimensions). Saved as a *private*
-   custom interview.
-2. **Call** — the server provisions an **ephemeral** Vapi assistant (system prompt
-   and questions stay server-side), opens an `Attempt`, and hands the browser only
-   the assistant id + public key. The browser runs the call with `@vapi-ai/web`.
-3. **Grade** — when the call ends, Vapi posts an end-of-call report to the
-   (secret-verified) webhook, which fires the idempotent `grade-attempt`
-   Trigger.dev task. DeepSeek scores the transcript; structured `Feedback` is
-   stored and the raw analysis goes to Blob. The results screen polls until ready.
-4. **Share** — publish a custom interview to the public directory; votes re-rank it
-   (Wilson lower bound) and the recommender personalizes each viewer's order.
-
-See [`docs/architecture.md`](docs/architecture.md) for the full picture.
-
-## Quick start
-
-> **Prerequisites:** Node.js 20+, a PostgreSQL database, and accounts/keys for
-> Clerk, Vapi, DeepSeek, Trigger.dev, and Vercel Blob. See
-> [`docs/configuration.md`](docs/configuration.md) for every variable.
+- Node.js 20+
+- PostgreSQL
+- Clerk, Vapi, DeepSeek, Trigger.dev, and Vercel Blob credentials
 
 ```bash
-# 1. Install
 npm install
-
-# 2. Configure — copy the template and fill in real values
 cp .env.example .env.local
-
-# 3. Set up the database
-npm run db:migrate      # apply migrations
-npm run db:seed         # seed starter templates + voice personas
-
-# 4. Run
-npm run dev             # http://localhost:3000
+npm run db:migrate
+npm run db:seed
+npm run dev
 ```
 
-> **Local voice note:** Vapi cannot reach `localhost`, so end-of-call webhooks are
-> repaired by server-side call reconciliation. For real webhooks locally, set
-> `VAPI_WEBHOOK_URL` to a public tunnel (ngrok / Vapi CLI). Details in
-> [`docs/voice-interview.md`](docs/voice-interview.md).
+Run the Trigger.dev worker in a second terminal when testing grading:
 
-## Scripts
+```bash
+npx trigger.dev dev
+```
 
-| Command                 | What it does                                            |
-| ----------------------- | ------------------------------------------------------- |
-| `npm run dev`         | Start the dev server                                    |
-| `npm run build`       | Production build                                        |
-| `npm run start`       | Serve the production build                              |
-| `npm run lint`        | ESLint                                                  |
-| `npm test`            | Unit tests (`tests/unit/*.test.ts`, Node test runner) |
-| `npm run db:migrate`  | Apply Prisma migrations (dev)                           |
-| `npm run db:generate` | Generate the Prisma client                              |
-| `npm run db:seed`     | Seed templates + voice personas                         |
-| `npm run db:studio`   | Open Prisma Studio                                      |
-| `npm run db:check`    | Sanity-check the DB connection/schema                   |
+Local Vapi webhooks need a public tunnel. Without one, status polling can repair
+missed callbacks through Vapi call reconciliation.
+
+## Commands
+
+| Command                 | Purpose                           |
+| ----------------------- | --------------------------------- |
+| `npm run dev`         | Start the dev server              |
+| `npm run build`       | Build for production              |
+| `npm run start`       | Serve the production build        |
+| `npm run lint`        | Run ESLint                        |
+| `npm test`            | Run unit tests                    |
+| `npm run ui:check`    | Run the UI prototype check        |
+| `npm run db:migrate`  | Run Prisma migrations             |
+| `npm run db:generate` | Generate Prisma client            |
+| `npm run db:seed`     | Seed templates and voice personas |
+| `npm run db:check`    | Check database connectivity       |
+| `npm run db:studio`   | Open Prisma Studio                |
+
+## Runtime Flow
+
+1. `POST /api/builder` runs one builder LLM turn.
+2. `POST /api/interviews` stores a generated private interview.
+3. `POST /api/interviews/:id/call` creates an attempt and a Vapi ephemeral assistant.
+4. The browser starts Vapi with the returned `assistantId` and public key.
+5. `POST /api/attempts/:id/grade` sends the captured transcript and triggers `grade-attempt`.
+6. Trigger.dev runs DeepSeek grading, stores `Feedback`, and streams progress to the results screen.
+7. `POST /api/vapi/webhook` and Vapi reconciliation are server-side fallbacks.
 
 ## Documentation
 
-| Doc                                               | Contents                                             |
-| ------------------------------------------------- | ---------------------------------------------------- |
-| [Architecture](docs/architecture.md)                 | System overview, request flows, module map           |
-| [Data model](docs/data-model.md)                     | Prisma schema, relations, indexes                    |
-| [Voice interview](docs/voice-interview.md)           | Vapi call lifecycle, webhook, reconciliation         |
-| [Grading](docs/grading.md)                           | Transcript analysis + durable grading task           |
-| [Directory &amp; ranking](docs/directory-ranking.md) | Voting, Wilson rank, auto-flag, recommender          |
-| [API reference](docs/api-reference.md)               | Every route handler: method, auth, body, response    |
-| [Caching](docs/caching-strategy.md)                  | Cache keys, TTLs, invalidation, ownership boundaries |
-| [Configuration](docs/configuration.md)               | Every environment variable                           |
-| [Development](docs/development.md)                   | Local setup, testing, conventions                    |
-| [Deployment](docs/deployment.md)                     | Vercel + production go-live checklist                |
-| [Security](docs/security.md)                         | Auth, secrets, rate limits, data handling            |
+| Doc                                        | Use it for                         |
+| ------------------------------------------ | ---------------------------------- |
+| [Architecture](doc/architecture.md)           | System boundaries and request flow |
+| [API reference](doc/api-reference.md)         | Route handlers, auth, payloads     |
+| [Data model](doc/data-model.md)               | Prisma models and indexes          |
+| [Voice interview](doc/voice-interview.md)     | Vapi assistant and call lifecycle  |
+| [Grading](doc/grading.md)                     | Trigger task and DeepSeek analysis |
+| [Directory ranking](doc/directory-ranking.md) | Publishing, votes, recommendations |
+| [Caching](doc/caching-strategy.md)            | Directory cache and invalidation   |
+| [Configuration](doc/configuration.md)         | Environment variables              |
+| [Development](doc/development.md)             | Local workflow and conventions     |
+| [Deployment](doc/deployment.md)               | Production checklist               |
+| [Security](doc/security.md)                   | Auth, secrets, data handling       |
 
-## Project layout
+## Project Layout
 
+```text
+app/            Next.js pages and API route handlers
+components/     TalkT feature screens and shadcn primitives
+lib/            Server logic, repositories, integrations, pure helpers
+prisma/         Schema, migrations, seed data
+trigger/        Trigger.dev tasks
+tests/unit/     Node test runner suites
+doc/            Developer documentation
+proxy.ts        Clerk middleware
 ```
-app/            Next.js App Router — pages + /api route handlers
-components/     UI — talkt/ (feature screens) + ui/ (shadcn primitives)
-lib/            Server logic — db/, vapi/, llm, analysis, ranking, recommend, …
-prisma/         Schema, migrations, seed
-trigger/        Trigger.dev tasks (grade-attempt)
-tests/unit/     Unit tests (pure logic)
-docs/           This documentation
-proxy.ts        Clerk auth middleware (protected-first)
-```
 
-## Contributing
-
-Contributions are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md). Found a
-security issue? Please follow [`SECURITY.md`](SECURITY.md) rather than opening a
-public issue.
+Before changing Next.js framework code, read the relevant bundled guide in
+`node_modules/next/dist/docs/`. This project uses Next.js 16 APIs.
 
 ## License
 
-[MIT](LICENSE) © 2026 yeabwang
+[MIT](LICENSE)
