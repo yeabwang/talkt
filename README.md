@@ -35,8 +35,8 @@ TalkT is a place for spoken interview practice. Users create or select an interv
 
 ### Core Features
 
-| Feature                      | Why users care                                                                                                             |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Feature                      |                                                                                                                            |
+| :--------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Custom interview builder     | Turn a target role, topic, language, and difficulty into a focused interview without writing prompts by hand.              |
 | Template library             | Start fast from curated and community interviews when users do not want to build from scratch.                             |
 | Real-time voice interview    | Practice speaking under realistic pressure in the browser, with an interviewer that asks the stored question set out loud. |
@@ -133,9 +133,6 @@ tests/unit/     Node test runner suites
 doc/            Developer documentation
 proxy.ts        Clerk middleware
 ```
-
-Before changing Next.js framework code, read the relevant bundled guide in
-`node_modules/next/dist/docs/`. This project uses Next.js 16 APIs.
 
 ## License
 
