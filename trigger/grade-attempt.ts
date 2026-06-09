@@ -18,6 +18,17 @@ export interface GradeAttemptPayload {
 /** The grading steps streamed to the UI, in order. */
 export type GradeStep = "received" | "scoring" | "saving" | "done";
 
+/** Host of the configured database for logging purposes */
+function dbHost(): string {
+  const url = process.env.DATABASE_URL;
+  if (!url) return "<unset>";
+  try {
+    return new URL(url).host || "<unknown>";
+  } catch {
+    return "<unparseable>";
+  }
+}
+
 /** Flatten the captured turns into the text the analyzer scores. */
 function turnsToText(transcript: { role: string; text: string }[]): string {
   return transcript
@@ -35,7 +46,19 @@ export const gradeAttempt = task({
     metadata.set("step", "received" satisfies GradeStep);
 
     const attempt = await findAttemptForWebhook(attemptId, null);
-    if (!attempt) throw new AbortTaskRunError(`Attempt ${attemptId} not found`);
+    if (!attempt) {
+      // The attempt row is committed by the caller before this task is triggered,
+      // so a miss here means the worker is querying a different database than the
+      // web app — almost always because Trigger.dev's DATABASE_URL (configured in
+      // the Trigger dashboard, separately from the web host) is stale or points at
+      // another environment. Log the DB host so that mismatch is obvious instead
+      // of a bare not-found, then abort without retry (retrying won't fix it).
+      logger.error("Attempt not found — worker DATABASE_URL likely differs from the web app", {
+        attemptId,
+        dbHost: dbHost(),
+      });
+      throw new AbortTaskRunError(`Attempt ${attemptId} not found`);
+    }
 
     // Idempotent: another trigger (webhook race / retry) already graded this.
     if (attempt.status === "ready") {
